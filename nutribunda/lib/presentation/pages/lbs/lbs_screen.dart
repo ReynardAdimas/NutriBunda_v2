@@ -10,7 +10,6 @@ class LBSScreen extends StatefulWidget {
 }
 
 class _LBSScreenState extends State<LBSScreen> {
-  static const _pink = Color(0xFFE91E8C);
 
   final LbsService _lbsService = LbsService();
 
@@ -84,7 +83,7 @@ class _LBSScreenState extends State<LBSScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _pink,
+              backgroundColor: Colors.green,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8)),
@@ -183,7 +182,7 @@ class _LBSScreenState extends State<LBSScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: _pink.withValues(alpha: 0.5),
+                    disabledBackgroundColor: Colors.green,
                     padding: const EdgeInsets.symmetric(vertical: 15),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -284,7 +283,7 @@ class _LBSScreenState extends State<LBSScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Hasil pencarian akan dibuka di Google Maps. Pastikan Google Maps sudah terpasang di perangkatmu.',
+                          'Hasil pencarian akan dibuka di Google Maps. Pastikan Google Maps sudah terpasang di perangkat anda.',
                           style: TextStyle(
                               fontSize: 12,
                               color: Colors.blue.shade700,
