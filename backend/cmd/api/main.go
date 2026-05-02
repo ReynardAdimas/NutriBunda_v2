@@ -11,6 +11,7 @@ import (
 	"nutribunda-backend/internal/quiz"
 	"nutribunda-backend/internal/recipe"
 	"nutribunda-backend/internal/user"
+	"nutribunda-backend/internal/currency"
 
 	"github.com/gin-gonic/gin"
 )
@@ -49,6 +50,7 @@ func main() {
 	recipeHandler := recipe.NewHandler(recipeService)
 	diaryHandler := diary.NewHandler(diaryService)
 	quizHandler := quiz.NewHandler(quizService)
+	currencyHandler := currency.NewHandler()
 
 	// Initialize Gin router
 	router := gin.Default()
@@ -127,6 +129,14 @@ func main() {
 			quizRoutes.GET("/questions", quizHandler.GetQuestions)
 			quizRoutes.POST("/submit", quizHandler.SubmitAnswers)
 			quizRoutes.GET("/questions/all", quizHandler.GetAllQuestions) // For admin/testing
+		}
+
+		// Currency Routes (public)
+		currencyRoutes := api.Group("/currency")
+		{
+			currencyRoutes.GET("/supported",currencyHandler.GetSupportedCurrencies)
+			currencyRoutes.GET("/rate", currencyHandler.GetExchangeRate)
+			currencyRoutes.POST("/convert", currencyHandler.ConvertPrice)
 		}
 	}
 

@@ -40,4 +40,11 @@ class ApiConstants {
   static const Duration connectionTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);
   static const Duration geminiTimeout = Duration(seconds: 60); 
+
+  // currency 
+  static const String currencyBase = '/currency'; 
+  static const String currencySupported = '/currency/supported'; 
+  static const String currencyRate = '/currency/rate'; 
+  static const String currencyDart = '/currency/convert';
 }
+
