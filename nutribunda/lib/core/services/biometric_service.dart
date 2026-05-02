@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
-import 'package:local_auth/error_codes.dart' as auth_error;
 import 'secure_storage_service.dart';
 
 /// Service untuk mengelola autentikasi biometrik
@@ -148,11 +147,8 @@ class BiometricService {
       // Lakukan autentikasi
       final bool didAuthenticate = await _localAuth.authenticate(
         localizedReason: localizedReason,
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: true,
-          useErrorDialogs: true,
-        ),
+        biometricOnly: true,
+        persistAcrossBackgrounding: true
       );
 
       if (didAuthenticate) {
@@ -174,18 +170,19 @@ class BiometricService {
       debugPrint('Biometric authentication error: ${e.code} - ${e.message}');
 
       // Handle specific error codes
-      if (e.code == auth_error.notAvailable) {
-        return BiometricAuthResult.notSupported;
-      } else if (e.code == auth_error.notEnrolled) {
-        return BiometricAuthResult.notEnrolled;
-      } else if (e.code == auth_error.lockedOut || e.code == auth_error.permanentlyLockedOut) {
-        return BiometricAuthResult.lockedOut(lockoutDurationMinutes);
-      } else if (e.code == auth_error.passcodeNotSet) {
-        return BiometricAuthResult.passcodeNotSet;
+      switch (e.code) {
+        case 'NotAvailable':
+          return BiometricAuthResult.notSupported;
+        case 'NotEnrolled':
+          return BiometricAuthResult.notEnrolled; 
+        case 'LockedOut':
+        case 'PermanentlyLockedOut':
+          return BiometricAuthResult.lockedOut(lockoutDurationMinutes); 
+        case 'PasscodeNotSet':
+          return BiometricAuthResult.passcodeNotSet; 
+        default:
+          return BiometricAuthResult.cancelled;
       }
-
-      // User cancelled or other errors
-      return BiometricAuthResult.cancelled;
     } catch (e) {
       debugPrint('Unexpected biometric error: $e');
       return BiometricAuthResult.error;

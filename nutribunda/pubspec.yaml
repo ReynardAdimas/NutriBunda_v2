@@ -30,7 +30,7 @@ dependencies:
   shared_preferences: ^2.3.3
 
   # Authentication
-  local_auth: ^2.3.0
+  local_auth: ^3.0.1
 
   # Sensors
   sensors_plus: ^6.0.1
