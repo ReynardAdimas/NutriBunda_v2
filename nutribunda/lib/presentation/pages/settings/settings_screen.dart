@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:nutribunda/presentation/pages/settings/currency_setting_page.dart';
+import 'package:nutribunda/presentation/pages/settings/kesan_pesan_page.dart';
+import 'package:nutribunda/presentation/providers/currency_provider.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import 'notification_settings_page.dart';
@@ -53,6 +56,22 @@ class SettingsScreen extends StatelessWidget {
               );
             },
           ),
+
+          const Divider(height: 1,), 
+
+          Consumer<CurrencyProvider>(
+            builder: (context, currencyProvider, _){
+              return ListTile(
+                leading: const Icon(Icons.currency_exchange),
+                title: const Text('Mata Uang Harga Makanan'), 
+                subtitle: Text('Saat ini: ${currencyProvider.selectedCurrency}'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16,),
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const CurrencySettingsPage()));
+                },
+              );
+            },
+          ),
           
           // About Section
           _buildSectionHeader('Tentang'),
@@ -72,7 +91,18 @@ class SettingsScreen extends StatelessWidget {
           ),
           
           const Divider(height: 1),
+
+          _buildSectionHeader('Kesan & Pesan TPM'), 
+
+          ListTile(
+            leading: Icon(Icons.heart_broken),
+            title: Text('Kesan & Pesan TPM'),
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const KesanPesanPage()));
+            },
+          ),
           
+          const Divider(height: 1,),
           // Account Section
           _buildSectionHeader('Akun'),
           

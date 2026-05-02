@@ -45,6 +45,6 @@ class ApiConstants {
   static const String currencyBase = '/currency'; 
   static const String currencySupported = '/currency/supported'; 
   static const String currencyRate = '/currency/rate'; 
-  static const String currencyDart = '/currency/convert';
+  static const String currencyConvert = '/currency/convert';
 }
 

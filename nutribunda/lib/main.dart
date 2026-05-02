@@ -26,6 +26,8 @@ import 'presentation/pages/recipe/favorite_recipes_screen.dart';
 import 'presentation/pages/settings/notification_settings_page.dart';
 import 'presentation/pages/settings/biometric_settings_page.dart';
 import 'presentation/themes/app_theme.dart';
+import 'presentation/providers/currency_provider.dart';
+import 'presentation/pages/settings/currency_setting_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -72,6 +74,9 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => di.sl<DietPlanProvider>(),
         ),
+        ChangeNotifierProvider(
+          create: (_) => di.sl<CurrencyProvider>()..loadSupportedCurrencies(),
+        ),
       ],
       child: MaterialApp(
         title: 'NutriBunda',
@@ -98,6 +103,7 @@ class MyApp extends StatelessWidget {
           '/favorites': (context) => const FavoriteRecipesScreen(),
           '/settings/notifications': (context) => const NotificationSettingsPage(),
           '/settings/biometric': (context) => const BiometricSettingsPage(),
+          '/settings/currency': (context) => const CurrencySettingsPage()
         },
       ),
     );

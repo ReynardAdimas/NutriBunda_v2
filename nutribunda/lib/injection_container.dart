@@ -14,6 +14,7 @@ import 'core/services/quiz_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/pedometer_service.dart';
 import 'core/services/analytics_service.dart';
+import 'core/services/currency_service.dart';
 
 // Providers
 import 'presentation/providers/auth_provider.dart';
@@ -25,6 +26,7 @@ import 'presentation/providers/chat_provider.dart';
 import 'presentation/providers/quiz_provider.dart';
 import 'presentation/providers/notification_provider.dart';
 import 'presentation/providers/diet_plan_provider.dart';
+import 'presentation/providers/currency_provider.dart';
 
 /// Service Locator instance
 /// Digunakan untuk dependency injection di seluruh aplikasi
@@ -113,6 +115,10 @@ Future<void> init() async {
   sl.registerLazySingleton<PedometerService>(
     () => PedometerService(),
   );
+
+  sl.registerLazySingleton<CurrencyService>(
+    () => CurrencyService(),
+  );
   
   // Analytics Service - untuk performance monitoring dan analytics
   // Task 19.1 - Performance monitoring and analytics setup
@@ -189,6 +195,13 @@ Future<void> init() async {
   sl.registerLazySingleton(() => ChatProvider(
     chatService: sl(),
   ));
+
+  // Currency Provider - mengelola pilihan mata uang user secara persisten
+sl.registerLazySingleton<CurrencyProvider>(
+  () => CurrencyProvider(
+    currencyService: sl(),
+    prefs: sl(),
+  ),);
   
   // Quiz Provider - Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7
   sl.registerFactory(() => QuizProvider(

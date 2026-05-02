@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../providers/food_diary_provider.dart';
 import '../../widgets/diary/food_search_widget.dart';
 import '../../../data/models/food_model.dart';
+import '../../widgets/common/price_display_widget.dart';
 
 /// Add Diary Entry Screen
 /// Requirements: 4.2, 4.4 - Food search, manual entry, meal time selection
@@ -17,7 +18,7 @@ class AddDiaryEntryScreen extends StatefulWidget {
 
 class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
   final _formKey = GlobalKey<FormState>();
-  
+
   // Form fields
   FoodModel? _selectedFood;
   String? _customFoodName;
@@ -136,7 +137,8 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
                     _selectedFood = food;
                   });
                 },
-                category: provider.selectedProfile == 'baby' ? 'mpasi' : 'ibu',
+                category:
+                    provider.selectedProfile == 'baby' ? 'mpasi' : 'ibu',
               ),
               if (_selectedFood != null) ...[
                 const SizedBox(height: 16),
@@ -192,6 +194,8 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
               ],
+              // Rebuild nutrition preview saat serving size berubah
+              onChanged: (_) => setState(() {}),
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Porsi harus diisi';
@@ -205,7 +209,8 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
             ),
 
             // Nutrition Preview (for database food)
-            if (_selectedFood != null && _servingSizeController.text.isNotEmpty) ...[
+            if (_selectedFood != null &&
+                _servingSizeController.text.isNotEmpty) ...[
               const SizedBox(height: 16),
               _buildNutritionPreview(),
             ],
@@ -247,7 +252,8 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
                     const Icon(Icons.calendar_today),
                     const SizedBox(width: 12),
                     Text(
-                      DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(_selectedDate),
+                      DateFormat('EEEE, d MMMM yyyy', 'id_ID')
+                          .format(_selectedDate),
                       style: const TextStyle(fontSize: 16),
                     ),
                   ],
@@ -438,6 +444,7 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
     }
 
     final nutrition = _selectedFood!.calculateNutrition(servingSize);
+    final hasPrice = _selectedFood!.estimatedPricePer100g != null;
 
     return Card(
       color: Colors.blue[50],
@@ -446,6 +453,7 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Judul ──────────────────────────────────────────────────────
             const Text(
               'Nutrisi untuk porsi ini:',
               style: TextStyle(
@@ -454,15 +462,75 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
               ),
             ),
             const SizedBox(height: 8),
+
+            // ── Baris Nutrisi ──────────────────────────────────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNutrientInfo('Kalori', '${nutrition.calories.toStringAsFixed(1)} kkal'),
-                _buildNutrientInfo('Protein', '${nutrition.protein.toStringAsFixed(1)}g'),
-                _buildNutrientInfo('Karbo', '${nutrition.carbs.toStringAsFixed(1)}g'),
-                _buildNutrientInfo('Lemak', '${nutrition.fat.toStringAsFixed(1)}g'),
+                _buildNutrientInfo(
+                    'Kalori', '${nutrition.calories.toStringAsFixed(1)} kkal'),
+                _buildNutrientInfo(
+                    'Protein', '${nutrition.protein.toStringAsFixed(1)}g'),
+                _buildNutrientInfo(
+                    'Karbo', '${nutrition.carbs.toStringAsFixed(1)}g'),
+                _buildNutrientInfo(
+                    'Lemak', '${nutrition.fat.toStringAsFixed(1)}g'),
               ],
             ),
+
+            // ── Estimasi Harga (Step 7b) ───────────────────────────────────
+            // Hanya tampil jika data harga tersedia di database
+            if (hasPrice) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.shopping_cart_outlined,
+                        size: 16,
+                        color: Colors.grey[600],
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Estimasi Harga',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Widget ini otomatis konversi ke mata uang pilihan user
+                  // via CurrencyProvider. Fallback ke IDR jika rate belum ada.
+                  PriceDisplayForServing(
+                    priceIDRPer100g: _selectedFood!.estimatedPricePer100g!,
+                    servingGrams: servingSize,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    color: Colors.green[700],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              // Keterangan satuan agar user tidak bingung
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'untuk ${servingSize.toStringAsFixed(0)}g porsi',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[500],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -494,7 +562,11 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
   Widget _buildMealTimeSelector() {
     final mealTimes = [
       {'value': 'breakfast', 'label': 'Makan Pagi', 'icon': Icons.wb_sunny},
-      {'value': 'lunch', 'label': 'Makan Siang', 'icon': Icons.wb_sunny_outlined},
+      {
+        'value': 'lunch',
+        'label': 'Makan Siang',
+        'icon': Icons.wb_sunny_outlined
+      },
       {'value': 'dinner', 'label': 'Makan Malam', 'icon': Icons.nightlight},
       {'value': 'snack', 'label': 'Selingan', 'icon': Icons.cookie},
     ];
@@ -582,8 +654,10 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
       servingSize: servingSize,
       mealTime: _selectedMealTime,
       entryDate: _selectedDate,
-      calories: _isManualEntry ? double.parse(_caloriesController.text) : null,
-      protein: _isManualEntry ? double.parse(_proteinController.text) : null,
+      calories:
+          _isManualEntry ? double.parse(_caloriesController.text) : null,
+      protein:
+          _isManualEntry ? double.parse(_proteinController.text) : null,
       carbs: _isManualEntry ? double.parse(_carbsController.text) : null,
       fat: _isManualEntry ? double.parse(_fatController.text) : null,
     );

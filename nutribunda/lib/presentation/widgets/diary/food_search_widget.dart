@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import '../../providers/food_diary_provider.dart';
 import '../../../data/models/food_model.dart';
+import '../common/price_display_widget.dart';
 
 /// Food Search Widget with Autocomplete
 /// Requirements: 4.2 - Food search dengan autocomplete
@@ -133,13 +134,11 @@ class _FoodSearchWidgetState extends State<FoodSearchWidget> {
                             ),
                           ), 
                           if(food.estimatedPricePer100g != null) 
-                            Text(
-                              '~Rp ${_formatPrice(food.estimatedPricePer100g!)} / 100g',
-                                 style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.green[700],
-                                fontWeight: FontWeight.w500,
-                              ),
+                            PriceDisplay(
+                              priceIDR: food.estimatedPricePer100g!, 
+                              suffix: '/100g',
+                              style: const TextStyle(fontSize: 13),
+                              color: Colors.green.shade700,
                             )
                         ],
                       ),
