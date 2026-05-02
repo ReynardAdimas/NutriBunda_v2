@@ -2,7 +2,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiConstants {
   // Base URL - will be configured later
-  static const String baseUrl = 'http://localhost:8080/api';
+  static const String baseUrl = 'https://nutribundav2-production.up.railway.app/api';
   
   // Auth endpoints
   static const String register = '/auth/register';
