@@ -73,18 +73,6 @@ Panduan implementasi fitur-fitur spesifik
 - [Sync Implementation](./docs/implementation/sync-implementation.md)
 - [Pedometer Implementation](./docs/implementation/pedometer/)
 
-### 📋 [Task Summaries](./docs/tasks/)
-Ringkasan implementasi per task
-- [Task 6: Authentication](./docs/tasks/task-6/)
-- [Task 7: Food Diary](./docs/tasks/task-7/)
-- [Task 8: Diet Plan](./docs/tasks/task-8/)
-- [Task 10-19: Other Features](./docs/tasks/)
-
-### 🧪 [Testing Documentation](./docs/testing/)
-Dokumentasi testing dan quality assurance
-- [Backend Testing](./docs/testing/backend/)
-- [Frontend Testing](./docs/testing/frontend/)
-- [Property-Based Testing](./docs/testing/property-based/)
 
 ## 🏗️ Arsitektur
 
@@ -118,46 +106,6 @@ NutriBunda/
 ├── .kiro/                # Kiro specs
 └── docker-compose.yml    # PostgreSQL container
 ```
-
-## 📊 Status Implementasi
-
-**Progress**: 5/20 Tasks Complete (25%)
-
-### ✅ Completed Tasks
-
-- **Task 1**: Setup Proyek dan Infrastruktur
-- **Task 2**: Autentikasi dan Keamanan Backend
-- **Task 3**: Food Database dan API
-- **Task 4**: Food Diary API
-- **Task 5**: Setup State Management dan Arsitektur Flutter
-
-### 📋 Upcoming
-
-- **Task 6**: Autentikasi Flutter
-- **Task 7–9**: Fitur Utama (Food Diary UI, Diet Plan)
-- **Task 10–11**: Sensor & Resep
-- **Task 12–14**: Integrasi Eksternal (LBS, AI Chatbot, Quiz, Notifikasi)
-- **Task 15–17**: UI/UX & Offline
-- **Task 18–20**: Testing & Finalisasi
-
-Lihat [Project Overview](./docs/getting-started/project-overview.md) untuk detail lengkap.
-
-## 🧪 Testing
-
-### Backend Tests
-```bash
-cd backend
-go test ./...
-```
-
-### Flutter Tests
-```bash
-cd nutribunda
-flutter test
-```
-
-Lihat [Testing Documentation](./docs/testing/) untuk panduan lengkap.
-
 ## 🔐 Security
 
 - Passwords di-hash menggunakan bcrypt
@@ -173,7 +121,7 @@ This project is private and not licensed for public use.
 
 ## 👥 Team
 
-Developed by TPM Team - Semester 6
+Developed by Reynard Adimas Nabil & Andhika Kusuma Wardana
 
 ---
 
@@ -184,8 +132,7 @@ Developed by TPM Team - Semester 6
 - [🔧 Backend API](./docs/backend/)
 - [📱 Flutter App](./docs/frontend/)
 - [💡 Implementation Guides](./docs/implementation/)
-- [🧪 Testing](./docs/testing/)
 
 ---
 
-**Last Updated**: April 29, 2026
+**Last Updated**: May 3, 2026
