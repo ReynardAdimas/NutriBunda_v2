@@ -6,13 +6,13 @@ import 'package:flutter/foundation.dart';
 /// Service untuk mengelola shake detection menggunakan accelerometer
 /// Requirements: 6.1, 6.2, 6.6
 class AccelerometerService {
-  StreamSubscription<AccelerometerEvent>? _subscription;
+  StreamSubscription<UserAccelerometerEvent>? _subscription;
   DateTime? _lastShakeTime;
   
   // Constants dari design specification
-  static const double shakeThreshold = 15.0; // m/s²
+  static const double shakeThreshold = 20.0; // m/s²
   static const int shakeCooldownMs = 3000; // 3 detik
-  static const int shakeDurationMs = 300; // minimal 300ms untuk deteksi shake
+  static const int shakeDurationMs = 500; // minimal 300ms untuk deteksi shake
   
   bool _isListening = false;
   String? _errorMessage;
@@ -35,8 +35,8 @@ class AccelerometerService {
     }
     
     try {
-      _subscription = accelerometerEventStream().listen(
-        (AccelerometerEvent event) {
+      _subscription = userAccelerometerEventStream().listen(
+        (UserAccelerometerEvent event) {
           _handleAccelerometerEvent(event, onShakeDetected);
         },
         onError: (error) {
@@ -57,7 +57,7 @@ class AccelerometerService {
   /// Handle accelerometer event and detect shake
   /// Requirements: 6.2 - Deteksi shake dengan threshold 15 m/s² minimal 300ms
   void _handleAccelerometerEvent(
-    AccelerometerEvent event,
+    UserAccelerometerEvent event,
     Function onShakeDetected,
   ) {
     // Calculate magnitude of acceleration vector: sqrt(x² + y² + z²)

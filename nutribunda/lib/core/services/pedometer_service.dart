@@ -14,6 +14,7 @@ class PedometerService {
   String? _errorMessage;
   
   bool _isListening = false;
+  bool _initialStepsSet = false; // FIX: flag terpisah, tidak bergantung nilai 0
   
   // Getters
   int get currentSteps => _currentSteps;
@@ -34,9 +35,10 @@ class PedometerService {
       // Listen to step count stream
       _subscription = Pedometer.stepCountStream.listen(
         (StepCount event) {
-          // Initialize the baseline on first event
-          if (_initialSteps == 0) {
+          // FIX: Gunakan flag boolean, bukan cek nilai == 0
+          if (!_initialStepsSet) {
             _initialSteps = event.steps;
+            _initialStepsSet = true;
             debugPrint('PedometerService: Initial steps set to ${event.steps}');
           }
           
@@ -96,6 +98,7 @@ class PedometerService {
     _statusSubscription = null;
     
     _isListening = false;
+    _initialStepsSet = false; // FIX: reset flag saat berhenti
     debugPrint('PedometerService: Stopped listening');
   }
   
@@ -106,6 +109,7 @@ class PedometerService {
     // Move current total to initial, effectively resetting current to 0
     _initialSteps = _currentSteps + _initialSteps;
     _currentSteps = 0;
+    _initialStepsSet = false; // FIX: reset flag agar baseline diperbarui di event berikutnya
     debugPrint('PedometerService: Daily steps reset (new baseline: $_initialSteps)');
   }
   

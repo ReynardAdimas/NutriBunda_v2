@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/diet_plan_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// Pedometer Controls Widget
 /// Requirements: 5.6, 5.7, 5.8 - UI controls untuk pedometer tracking
@@ -344,35 +345,22 @@ class PedometerControls extends StatelessWidget {
   /// Start pedometer with permission check
   /// Requirements: 5.8 - Permission handling UI untuk sensor akses
   void _startPedometerWithPermissionCheck(
-    BuildContext context,
-    DietPlanProvider provider,
-  ) {
-    // Start tracking
+  BuildContext context,
+  DietPlanProvider provider,
+) async {
+  final status = await Permission.activityRecognition.request();
+
+  if (!context.mounted) return;
+
+  if (status.isGranted) {
     provider.startPedometerTracking();
-
-    // Show feedback
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Text('Pedometer dimulai'),
-          ],
-        ),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
+      const SnackBar(content: Text('Pedometer dimulai')),
     );
-
-    // Check for errors after a short delay
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (provider.pedometerError != null) {
-        _showPermissionDialog(context, provider.pedometerError!);
-      }
-    });
+  } else {
+    _showPermissionDialog(context, 'Izin sensor aktivitas diperlukan untuk menghitung langkah kaki.');
   }
+}
 
   /// Show permission dialog when sensor access is denied
   /// Requirements: 5.8 - Permission handling UI
