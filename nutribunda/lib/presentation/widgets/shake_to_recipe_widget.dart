@@ -18,27 +18,26 @@ class _ShakeToRecipeWidgetState extends State<ShakeToRecipeWidget>
   final AccelerometerService _accelerometerService = AccelerometerService();
   bool _isShakeEnabled = false;
   bool _isShaking = false;
-  
+
   late AnimationController _animationController;
   late Animation<double> _shakeAnimation;
 
   @override
   void initState() {
     super.initState();
-    
-    // Initialize shake animation
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    
+
     _shakeAnimation = Tween<double>(begin: 0, end: 10).animate(
       CurvedAnimation(
         parent: _animationController,
         curve: Curves.elasticIn,
       ),
     );
-    
+
     _startShakeDetection();
   }
 
@@ -49,22 +48,18 @@ class _ShakeToRecipeWidgetState extends State<ShakeToRecipeWidget>
     super.dispose();
   }
 
-  /// Start shake detection
-  /// Requirements: 6.1 - Memantau akselerometer saat aplikasi aktif
+  /// FIX: Cek ketersediaan sensor setelah start, baru update flag
   void _startShakeDetection() {
     _accelerometerService.startListening(() {
-      // Callback when shake is detected
-      // Requirements: 6.3 - Menampilkan resep acak saat shake terdeteksi
       _onShakeDetected();
     });
-    
+
+    // FIX: set enabled hanya jika sensor benar-benar tersedia
     setState(() {
-      _isShakeEnabled = true;
+      _isShakeEnabled = _accelerometerService.isSensorAvailable;
     });
   }
 
-  /// Handle shake detection
-  /// Requirements: 6.2, 6.3 - Memicu peristiwa shake dan menampilkan resep
   void _onShakeDetected() {
     if (!mounted || _isShaking) return;
 
@@ -72,10 +67,8 @@ class _ShakeToRecipeWidgetState extends State<ShakeToRecipeWidget>
       _isShaking = true;
     });
 
-    // Start shake animation
     _animationController.repeat(reverse: true);
 
-    // Show loading indicator
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -97,19 +90,16 @@ class _ShakeToRecipeWidgetState extends State<ShakeToRecipeWidget>
       ),
     );
 
-    // Get random recipe
     final recipeProvider = context.read<RecipeProvider>();
     recipeProvider.getRandomRecipe().then((_) {
-      // Stop animation
       _animationController.stop();
       _animationController.reset();
-      
+
       setState(() {
         _isShaking = false;
       });
 
       if (mounted && recipeProvider.currentRecipe != null) {
-        // Navigate to recipe detail screen
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -119,7 +109,6 @@ class _ShakeToRecipeWidgetState extends State<ShakeToRecipeWidget>
           ),
         );
       } else if (mounted && recipeProvider.errorMessage != null) {
-        // Show error
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(recipeProvider.errorMessage!),
@@ -132,6 +121,11 @@ class _ShakeToRecipeWidgetState extends State<ShakeToRecipeWidget>
 
   @override
   Widget build(BuildContext context) {
+    // FIX: Jika sensor tidak tersedia, tampilkan UI fallback
+    if (!_isShakeEnabled && _accelerometerService.errorMessage != null) {
+      return _buildSensorUnavailableUI();
+    }
+
     return AnimatedBuilder(
       animation: _shakeAnimation,
       builder: (context, child) {
@@ -146,10 +140,7 @@ class _ShakeToRecipeWidgetState extends State<ShakeToRecipeWidget>
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    Colors.orange.shade50,
-                    Colors.orange.shade100,
-                  ],
+                  colors: [Colors.orange.shade50, Colors.orange.shade100],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -174,7 +165,9 @@ class _ShakeToRecipeWidgetState extends State<ShakeToRecipeWidget>
                         ],
                       ),
                       child: Icon(
-                        _isShaking ? Icons.restaurant_menu : Icons.phone_android,
+                        _isShaking
+                            ? Icons.restaurant_menu
+                            : Icons.phone_android,
                         size: 48,
                         color: Colors.orange,
                       ),
@@ -191,45 +184,13 @@ class _ShakeToRecipeWidgetState extends State<ShakeToRecipeWidget>
                     Text(
                       _isShaking
                           ? 'Mohon tunggu sebentar'
-                          : _isShakeEnabled
-                              ? 'Goyangkan smartphone Anda untuk mendapatkan resep MPASI acak!'
-                              : 'Mengaktifkan sensor...',
+                          : 'Goyangkan smartphone Anda untuk mendapatkan resep MPASI acak!',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.grey.shade700,
                         fontSize: 14,
                       ),
                     ),
-                    if (_accelerometerService.errorMessage != null) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.error_outline,
-                              color: Colors.red.shade700,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                _accelerometerService.errorMessage!,
-                                style: TextStyle(
-                                  color: Colors.red.shade700,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -237,6 +198,61 @@ class _ShakeToRecipeWidgetState extends State<ShakeToRecipeWidget>
           ),
         );
       },
+    );
+  }
+
+  /// FIX: UI fallback saat sensor akselerometer tidak tersedia
+  Widget _buildSensorUnavailableUI() {
+    return Card(
+      margin: const EdgeInsets.all(16),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.sensors_off, size: 48, color: Colors.grey.shade400),
+              const SizedBox(height: 12),
+              Text(
+                'Fitur Shake Tidak Tersedia',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Perangkat ini tidak memiliki sensor akselerometer '
+                'yang diperlukan untuk fitur shake-to-recipe.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              // Tombol fallback untuk tetap bisa akses resep acak
+              ElevatedButton.icon(
+                onPressed: _isShaking ? null : _onShakeDetected,
+                icon: const Icon(Icons.restaurant_menu, size: 18),
+                label: const Text('Tampilkan Resep Acak'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

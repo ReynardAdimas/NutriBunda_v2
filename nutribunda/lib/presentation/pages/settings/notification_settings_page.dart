@@ -165,7 +165,7 @@ class _NotificationSettingsPageState
                       icon: const Icon(Icons.notifications_active),
                       label: const Text('Izinkan Notifikasi'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE91E8C),
+                        backgroundColor: Theme.of(context).primaryColor,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 24, vertical: 12),
