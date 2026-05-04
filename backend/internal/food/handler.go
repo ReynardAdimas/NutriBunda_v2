@@ -21,12 +21,12 @@ func NewHandler(service *Service) *Handler {
 
 // SearchFoods handles food search requests
 // @Summary Search foods
-// @Description Search for foods by name and category
+// @Description Search for foods by name and category (termasuk category 'custom' untuk makanan input manual)
 // @Tags foods
 // @Accept json
 // @Produce json
 // @Param search query string false "Search term"
-// @Param category query string false "Category filter (mpasi or ibu)"
+// @Param category query string false "Category filter (mpasi, ibu, atau custom)"
 // @Param limit query int false "Result limit"
 // @Success 200 {object} SearchResponse
 // @Failure 400 {object} map[string]interface{}
@@ -92,6 +92,45 @@ func (h *Handler) GetFoodByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"food": food,
 	})
+}
+
+// CreateFood handles creating a new custom food entry
+// @Summary Create custom food
+// @Description Simpan makanan input manual ke database agar bisa dicari kembali
+// @Tags foods
+// @Accept json
+// @Produce json
+// @Param food body CreateFoodRequest true "Food data"
+// @Success 201 {object} database.Food
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/foods [post]
+func (h *Handler) CreateFood(c *gin.Context) {
+	var req CreateFoodRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request body",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	food, err := h.service.CreateFood(&req)
+	if err != nil {
+		switch err {
+		case ErrInvalidCategory:
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Category harus salah satu dari: mpasi, ibu, custom",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create food",
+			})
+		}
+		return
+	}
+
+	c.JSON(http.StatusCreated, food)
 }
 
 // SyncFoods handles food synchronization requests

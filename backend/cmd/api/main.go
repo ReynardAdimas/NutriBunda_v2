@@ -4,6 +4,7 @@ import (
 	"log"
 	"nutribunda-backend/configs"
 	"nutribunda-backend/internal/auth"
+	"nutribunda-backend/internal/currency"
 	"nutribunda-backend/internal/database"
 	"nutribunda-backend/internal/diary"
 	"nutribunda-backend/internal/food"
@@ -11,7 +12,6 @@ import (
 	"nutribunda-backend/internal/quiz"
 	"nutribunda-backend/internal/recipe"
 	"nutribunda-backend/internal/user"
-	"nutribunda-backend/internal/currency"
 
 	"github.com/gin-gonic/gin"
 )
@@ -90,12 +90,17 @@ func main() {
 			profileRoutes.DELETE("/image", userHandler.DeleteProfileImage)
 		}
 
-		// Food routes (public)
+		// Food routes
 		foodRoutes := api.Group("/foods")
 		{
+			// Public — read
 			foodRoutes.GET("", foodHandler.SearchFoods)
 			foodRoutes.GET("/sync", foodHandler.SyncFoods)
 			foodRoutes.GET("/:id", foodHandler.GetFoodByID)
+
+			// Public — create custom food
+			// Tidak butuh auth agar bisa dipakai saat offline-sync juga
+			foodRoutes.POST("", foodHandler.CreateFood) // ← BARU
 		}
 
 		// Recipe routes
@@ -128,13 +133,13 @@ func main() {
 		{
 			quizRoutes.GET("/questions", quizHandler.GetQuestions)
 			quizRoutes.POST("/submit", quizHandler.SubmitAnswers)
-			quizRoutes.GET("/questions/all", quizHandler.GetAllQuestions) // For admin/testing
+			quizRoutes.GET("/questions/all", quizHandler.GetAllQuestions)
 		}
 
 		// Currency Routes (public)
 		currencyRoutes := api.Group("/currency")
 		{
-			currencyRoutes.GET("/supported",currencyHandler.GetSupportedCurrencies)
+			currencyRoutes.GET("/supported", currencyHandler.GetSupportedCurrencies)
 			currencyRoutes.GET("/rate", currencyHandler.GetExchangeRate)
 			currencyRoutes.POST("/convert", currencyHandler.ConvertPrice)
 		}

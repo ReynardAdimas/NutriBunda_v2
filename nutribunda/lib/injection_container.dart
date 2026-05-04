@@ -16,6 +16,10 @@ import 'core/services/pedometer_service.dart';
 import 'core/services/analytics_service.dart';
 import 'core/services/currency_service.dart';
 
+// Local Data Sources  ← TAMBAHAN
+import 'data/datasources/local/local_diary_datasource.dart';
+import 'data/datasources/local/local_food_datasource.dart';
+
 // Providers
 import 'presentation/providers/auth_provider.dart';
 import 'presentation/providers/profile_provider.dart';
@@ -38,7 +42,7 @@ Future<void> init() async {
   // ============================================================================
   // CORE - External Dependencies
   // ============================================================================
-  
+
   // Secure Storage untuk JWT dan sensitive data
   sl.registerLazySingleton<FlutterSecureStorage>(
     () => const FlutterSecureStorage(
@@ -50,51 +54,51 @@ Future<void> init() async {
       ),
     ),
   );
-  
+
   // Shared Preferences untuk non-sensitive data
   final sharedPreferences = await SharedPreferences.getInstance();
   sl.registerLazySingleton<SharedPreferences>(() => sharedPreferences);
-  
+
   // ============================================================================
   // CORE SERVICES
   // ============================================================================
-  
+
   // Secure Storage Service - untuk mengelola JWT dan data terenkripsi
   // Requirements: 1.4, 1.6, 1.7
   sl.registerLazySingleton<SecureStorageService>(
     () => SecureStorageService(secureStorage: sl()),
   );
-  
+
   // HTTP Client Service - untuk komunikasi dengan backend API
   // Requirements: 1.4, 1.6
   sl.registerLazySingleton<HttpClientService>(
     () => HttpClientService(secureStorage: sl()),
   );
-  
+
   // Biometric Service - untuk autentikasi biometrik
   // Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
   sl.registerLazySingleton<BiometricService>(
     () => BiometricService(secureStorage: sl()),
   );
-  
+
   // Location Service - untuk mendapatkan GPS coordinates
   // Requirements: 8.1, 8.2, 8.7
   sl.registerLazySingleton<LocationService>(
     () => LocationService(),
   );
-  
+
   // Maps Launcher Service - untuk membuka Google Maps dengan deep link
   // Requirements: 8.3, 8.4, 8.5, 8.6
   sl.registerLazySingleton<MapsLauncherService>(
     () => MapsLauncherService(),
   );
-  
+
   // Chat Service - untuk integrasi dengan Gemini API
   // Requirements: 9.1, 9.2, 9.3, 9.4
   sl.registerLazySingleton<ChatService>(
     () => ChatService(),
   );
-  
+
   // Quiz Service - untuk quiz game functionality
   // Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7
   sl.registerLazySingleton<QuizService>(
@@ -103,13 +107,13 @@ Future<void> init() async {
       prefs: sl(),
     ),
   );
-  
+
   // Notification Service - untuk local notifications dengan timezone support
   // Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6
   sl.registerLazySingleton<NotificationService>(
     () => NotificationService(),
   );
-  
+
   // Pedometer Service - untuk menghitung langkah kaki
   // Requirements: 5.6, 5.7
   sl.registerLazySingleton<PedometerService>(
@@ -119,16 +123,16 @@ Future<void> init() async {
   sl.registerLazySingleton<CurrencyService>(
     () => CurrencyService(),
   );
-  
+
   // Analytics Service - untuk performance monitoring dan analytics
   // Task 19.1 - Performance monitoring and analytics setup
   sl.registerLazySingleton<AnalyticsService>(
     () => AnalyticsService(),
   );
-  
+
   // Initialize analytics service
   await sl<AnalyticsService>().initialize();
-  
+
   // HTTP Client (Dio) - raw instance untuk custom usage
   sl.registerLazySingleton<Dio>(() {
     final dio = Dio(
@@ -142,7 +146,7 @@ Future<void> init() async {
         },
       ),
     );
-    
+
     // Add interceptors untuk logging dan error handling
     dio.interceptors.add(
       LogInterceptor(
@@ -151,125 +155,98 @@ Future<void> init() async {
         error: true,
       ),
     );
-    
+
     return dio;
   });
-  
+
+  // ============================================================================
+  // LOCAL DATA SOURCES  ← TAMBAHAN
+  // ============================================================================
+
+  // Local Diary Data Source - SQLite CRUD untuk diary entries
+  sl.registerLazySingleton<LocalDiaryDataSource>(
+    () => LocalDiaryDataSource(),
+  );
+
+  // Local Food Data Source - SQLite CRUD untuk food database
+  sl.registerLazySingleton<LocalFoodDataSource>(
+    () => LocalFoodDataSource(),
+  );
+
   // ============================================================================
   // PROVIDERS - State Management
   // ============================================================================
-  
-  // Providers akan didaftarkan di sini saat implementasi fitur
-  // Menggunakan registerFactory untuk providers agar setiap kali diakses
-  // akan membuat instance baru
-  
+
   // Auth Provider - Requirements: 1.1, 1.5, 1.7, 2.1, 2.2, 2.3, 2.4, 2.5
   sl.registerFactory(() => AuthProvider(
-    httpClient: sl(),
-    secureStorage: sl(),
-    biometricService: sl(),
-  ));
-  
+        httpClient: sl(),
+        secureStorage: sl(),
+        biometricService: sl(),
+      ));
+
   // Profile Provider - Requirements: 12.1, 12.2, 12.3, 12.4, 12.5
   sl.registerFactory(() => ProfileProvider(
-    httpClient: sl(),
-  ));
-  
+        httpClient: sl(),
+      ));
+
   // Food Diary Provider - Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6
+  // Offline-first: baca SQLite lokal, sync ke server saat online
   sl.registerFactory(() => FoodDiaryProvider(
-    httpClient: sl(),
-  ));
-  
+        httpClient: sl(),
+        localDiary: sl(),    // ← LocalDiaryDataSource
+        localFood: sl(),     // ← LocalFoodDataSource
+        secureStorage: sl(), // ← untuk ambil userId
+      ));
+
   // Recipe Provider - Requirements: 6.3, 6.4, 6.5, 7.1, 7.2, 7.3
   sl.registerFactory(() => RecipeProvider(
-    httpClient: sl(),
-  ));
-  
+        httpClient: sl(),
+      ));
+
   // LBS Provider - Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7
   sl.registerFactory(() => LBSProvider(
-    locationService: sl(),
-    mapsLauncher: sl(),
-  ));
-  
+        locationService: sl(),
+        mapsLauncher: sl(),
+      ));
+
   // Chat Provider - Requirements: 9.1, 9.2, 9.5, 9.6
   sl.registerLazySingleton(() => ChatProvider(
-    chatService: sl(),
-  ));
+        chatService: sl(),
+      ));
 
   // Currency Provider - mengelola pilihan mata uang user secara persisten
-sl.registerLazySingleton<CurrencyProvider>(
-  () => CurrencyProvider(
-    currencyService: sl(),
-    prefs: sl(),
-  ),);
-  
+  sl.registerLazySingleton<CurrencyProvider>(
+    () => CurrencyProvider(
+      currencyService: sl(),
+      prefs: sl(),
+    ),
+  );
+
   // Quiz Provider - Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7
   sl.registerFactory(() => QuizProvider(
-    quizService: sl(),
-  ));
-  
+        quizService: sl(),
+      ));
+
   // Notification Provider - Requirements: 11.1, 11.2, 11.3, 11.4, 11.5, 11.6
   sl.registerFactory(() => NotificationProvider(
-    notificationService: sl(),
-    prefs: sl(),
-  ));
-  
+        notificationService: sl(),
+        prefs: sl(),
+      ));
+
   // Diet Plan Provider - Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8
   sl.registerFactory(() => DietPlanProvider());
-  
+
   // ============================================================================
   // USE CASES - Business Logic
   // ============================================================================
-  
-  // Use cases akan didaftarkan di sini saat implementasi fitur
-  // Menggunakan registerLazySingleton karena use cases stateless
-  
-  // Contoh:
-  // sl.registerLazySingleton(() => LoginUseCase(repository: sl()));
-  
+
   // ============================================================================
   // REPOSITORIES - Data Layer
   // ============================================================================
-  
-  // Repositories akan didaftarkan di sini saat implementasi fitur
-  // Menggunakan registerLazySingleton untuk repositories
-  
-  // Contoh:
-  // sl.registerLazySingleton<AuthRepository>(
-  //   () => AuthRepositoryImpl(
-  //     remoteDataSource: sl(),
-  //     localDataSource: sl(),
-  //     networkInfo: sl(),
-  //   ),
-  // );
-  
+
   // ============================================================================
   // DATA SOURCES - Remote & Local
   // ============================================================================
-  
-  // Data sources akan didaftarkan di sini saat implementasi fitur
-  
-  // Contoh:
-  // sl.registerLazySingleton<AuthRemoteDataSource>(
-  //   () => AuthRemoteDataSourceImpl(client: sl()),
-  // );
-  // 
-  // sl.registerLazySingleton<AuthLocalDataSource>(
-  //   () => AuthLocalDataSourceImpl(secureStorage: sl()),
-  // );
-  
-  // ============================================================================
-  // SERVICES - Platform & External Services
-  // ============================================================================
-  
-  // Services akan didaftarkan di sini saat implementasi fitur
-  
-  // Contoh:
-  // sl.registerLazySingleton(() => BiometricService());
-  // sl.registerLazySingleton(() => PedometerService());
-  // sl.registerLazySingleton(() => AccelerometerService());
-  // sl.registerLazySingleton(() => LocationService());
-  // sl.registerLazySingleton(() => NotificationService());
 }
 
 /// Reset semua dependencies (untuk testing)
