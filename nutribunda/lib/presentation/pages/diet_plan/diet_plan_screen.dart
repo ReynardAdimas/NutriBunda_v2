@@ -16,41 +16,71 @@ class DietPlanScreen extends StatefulWidget {
   State<DietPlanScreen> createState() => _DietPlanScreenState();
 }
 
-class _DietPlanScreenState extends State<DietPlanScreen> {
+// ✅ PERBAIKAN: 'with WidgetsBindingObserver' harus menyatu di baris deklarasi class state
+class _DietPlanScreenState extends State<DietPlanScreen>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    // Load user data and initialize diet plan
+    // Daftarkan observer untuk deteksi AppLifecycleState (background/foreground)
+    // Langkah 10: Diperlukan agar forceSaveSteps() dipanggil saat app masuk background
+    WidgetsBinding.instance.addObserver(this);
+
+    // Load user data and initialize diet plan setelah frame pertama selesai render
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeDietPlan();
     });
   }
 
+  /// Langkah 10: Dipanggil otomatis saat AppLifecycleState berubah
+  /// Menyimpan data steps ke SQLite saat app di-pause atau ditutup
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      // Paksa simpan steps ke SQLite sebelum app masuk background
+      context.read<DietPlanProvider>().forceSaveSteps();
+    }
+  }
+
   Future<void> _initializeDietPlan() async {
     final authProvider = context.read<AuthProvider>();
     final dietPlanProvider = context.read<DietPlanProvider>();
-    
-    // Set user data from auth provider
+
+    // Set user data dari auth provider
     if (authProvider.user != null) {
       dietPlanProvider.setUser(authProvider.user!);
+
+      // Langkah 10: Set userId lokal agar steps bisa disimpan ke SQLite.
+      // UserModel.id bertipe String (UUID dari backend), sedangkan SQLite
+      // menggunakan INTEGER. Kita gunakan hashCode sebagai konversi yang konsisten
+      // selama satu instalasi app — nilainya selalu sama untuk UUID yang sama.
+      final userId = authProvider.user!.id.hashCode.abs();
+      dietPlanProvider.setCurrentUserId(userId);
     }
-    
-    // Load food diary data for mother profile to get consumed calories
+
+    // Load food diary data untuk profil ibu (untuk kalkulasi kalori dikonsumsi)
     final foodDiaryProvider = context.read<FoodDiaryProvider>();
     foodDiaryProvider.setSelectedProfile('mother');
     await foodDiaryProvider.loadEntries();
-    
+
     // Requirements: 5.6, 5.8 - Auto-start pedometer tracking saat screen dibuka
     if (dietPlanProvider.canCalculateDietPlan) {
+      // Langkah 10: Load data steps yang tersimpan di SQLite sebelum mulai tracking
+      await dietPlanProvider.loadTodaySteps();
       dietPlanProvider.startPedometerTracking();
     }
   }
 
   @override
   void dispose() {
-    // Stop pedometer when leaving screen
+    // Hapus observer lifecycle agar tidak terjadi memory leak
+    WidgetsBinding.instance.removeObserver(this);
+
+    // Stop pedometer saat meninggalkan screen
     final dietPlanProvider = context.read<DietPlanProvider>();
     dietPlanProvider.stopPedometerTracking();
+
     super.dispose();
   }
 
@@ -178,7 +208,6 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
             // Physical data form
             PhysicalDataForm(
               onSaved: () async {
-                // Refresh diet plan after saving
                 await _initializeDietPlan();
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -214,7 +243,6 @@ class _DietPlanScreenState extends State<DietPlanScreen> {
             // Diet Plan Dashboard
             DietPlanDashboard(
               onEditProfile: () {
-                // Show edit profile dialog
                 _showEditProfileDialog();
               },
             ),

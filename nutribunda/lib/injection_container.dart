@@ -1,6 +1,7 @@
 import 'package:get_it/get_it.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:nutribunda/data/datasources/local/database_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Core Services
@@ -16,9 +17,10 @@ import 'core/services/pedometer_service.dart';
 import 'core/services/analytics_service.dart';
 import 'core/services/currency_service.dart';
 
-// Local Data Sources  ← TAMBAHAN
+// Local Data Sources
 import 'data/datasources/local/local_diary_datasource.dart';
 import 'data/datasources/local/local_food_datasource.dart';
+import 'data/datasources/local/local_steps_datasource.dart';
 
 // Providers
 import 'presentation/providers/auth_provider.dart';
@@ -31,6 +33,8 @@ import 'presentation/providers/quiz_provider.dart';
 import 'presentation/providers/notification_provider.dart';
 import 'presentation/providers/diet_plan_provider.dart';
 import 'presentation/providers/currency_provider.dart';
+
+
 
 /// Service Locator instance
 /// Digunakan untuk dependency injection di seluruh aplikasi
@@ -173,6 +177,10 @@ Future<void> init() async {
     () => LocalFoodDataSource(),
   );
 
+  sl.registerLazySingleton<LocalStepsDatasource>(
+    () => LocalStepsDatasource(DatabaseHelper.instance)
+  );
+
   // ============================================================================
   // PROVIDERS - State Management
   // ============================================================================
@@ -234,7 +242,7 @@ Future<void> init() async {
       ));
 
   // Diet Plan Provider - Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8
-  sl.registerFactory(() => DietPlanProvider());
+  sl.registerFactory(() => DietPlanProvider(sl()));
 
   // ============================================================================
   // USE CASES - Business Logic
