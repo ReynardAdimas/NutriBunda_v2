@@ -32,13 +32,13 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
   final _proteinController = TextEditingController();
   final _carbsController = TextEditingController();
   final _fatController = TextEditingController();
+  final _priceController = TextEditingController(); // ← BARU: field harga
 
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize with provider's selected date
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<FoodDiaryProvider>();
       setState(() {
@@ -54,6 +54,7 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
     _proteinController.dispose();
     _carbsController.dispose();
     _fatController.dispose();
+    _priceController.dispose(); // ← BARU
     super.dispose();
   }
 
@@ -75,6 +76,7 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
                       _proteinController.clear();
                       _carbsController.clear();
                       _fatController.clear();
+                      _priceController.clear(); // ← BARU
                     });
                   }
                 : () {
@@ -194,7 +196,6 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
               ],
-              // Rebuild nutrition preview saat serving size berubah
               onChanged: (_) => setState(() {}),
               validator: (value) {
                 if (value == null || value.isEmpty) {
@@ -208,7 +209,7 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
               },
             ),
 
-            // Nutrition Preview (for database food)
+            // Nutrition Preview (untuk makanan dari database)
             if (_selectedFood != null &&
                 _servingSizeController.text.isNotEmpty) ...[
               const SizedBox(height: 16),
@@ -330,6 +331,7 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
     );
   }
 
+  /// Form input nutrisi + harga untuk input manual
   Widget _buildManualNutritionInputs() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,6 +344,8 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
           ),
         ),
         const SizedBox(height: 8),
+
+        // Kalori & Protein
         Row(
           children: [
             Expanded(
@@ -388,6 +392,8 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
           ],
         ),
         const SizedBox(height: 8),
+
+        // Karbohidrat & Lemak
         Row(
           children: [
             Expanded(
@@ -433,6 +439,43 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
             ),
           ],
         ),
+        const SizedBox(height: 16),
+
+        // ── BARU: Field Harga ──────────────────────────────────────────────
+        const Text(
+          'Harga (opsional)',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Estimasi harga per 100g makanan ini',
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: _priceController,
+          decoration: InputDecoration(
+            labelText: 'Harga per 100g',
+            hintText: 'Contoh: 5000',
+            border: const OutlineInputBorder(),
+            prefixText: 'Rp ',
+            prefixStyle: TextStyle(
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w500,
+            ),
+            helperText: 'Kosongkan jika tidak ingin mengisi harga',
+            helperStyle: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          ),
+          keyboardType: TextInputType.number,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+          ],
+          // Tidak ada validator wajib — harga memang opsional
+        ),
+        // ── END: Field Harga ───────────────────────────────────────────────
       ],
     );
   }
@@ -453,7 +496,6 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Judul ──────────────────────────────────────────────────────
             const Text(
               'Nutrisi untuk porsi ini:',
               style: TextStyle(
@@ -462,8 +504,6 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
               ),
             ),
             const SizedBox(height: 8),
-
-            // ── Baris Nutrisi ──────────────────────────────────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -477,9 +517,6 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
                     'Lemak', '${nutrition.fat.toStringAsFixed(1)}g'),
               ],
             ),
-
-            // ── Estimasi Harga (Step 7b) ───────────────────────────────────
-            // Hanya tampil jika data harga tersedia di database
             if (hasPrice) ...[
               const SizedBox(height: 12),
               const Divider(height: 1),
@@ -505,8 +542,6 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
                       ),
                     ],
                   ),
-                  // Widget ini otomatis konversi ke mata uang pilihan user
-                  // via CurrencyProvider. Fallback ke IDR jika rate belum ada.
                   PriceDisplayForServing(
                     priceIDRPer100g: _selectedFood!.estimatedPricePer100g!,
                     servingGrams: servingSize,
@@ -519,7 +554,6 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
                 ],
               ),
               const SizedBox(height: 4),
-              // Keterangan satuan agar user tidak bingung
               Align(
                 alignment: Alignment.centerRight,
                 child: Text(
@@ -629,7 +663,6 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
 
     _formKey.currentState!.save();
 
-    // Validate food selection
     if (!_isManualEntry && _selectedFood == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -646,6 +679,9 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
 
     final provider = context.read<FoodDiaryProvider>();
     final servingSize = double.parse(_servingSizeController.text);
+    final double? estimatedPrice = _priceController.text.trim().isEmpty
+        ? null
+        : double.tryParse(_priceController.text.trim());
 
     final success = await provider.addEntry(
       profileType: provider.selectedProfile,
@@ -654,12 +690,11 @@ class _AddDiaryEntryScreenState extends State<AddDiaryEntryScreen> {
       servingSize: servingSize,
       mealTime: _selectedMealTime,
       entryDate: _selectedDate,
-      calories:
-          _isManualEntry ? double.parse(_caloriesController.text) : null,
-      protein:
-          _isManualEntry ? double.parse(_proteinController.text) : null,
+      calories: _isManualEntry ? double.parse(_caloriesController.text) : null,
+      protein: _isManualEntry ? double.parse(_proteinController.text) : null,
       carbs: _isManualEntry ? double.parse(_carbsController.text) : null,
       fat: _isManualEntry ? double.parse(_fatController.text) : null,
+      estimatedPricePer100g: _isManualEntry ? estimatedPrice : null, // ← BARU
     );
 
     setState(() {
