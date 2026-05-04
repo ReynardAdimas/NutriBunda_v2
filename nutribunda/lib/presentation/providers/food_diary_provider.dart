@@ -8,12 +8,14 @@ import '../../data/datasources/local/local_diary_datasource.dart';
 import '../../data/datasources/local/local_food_datasource.dart';
 import '../../data/models/diary_entry.dart';
 import '../../data/models/local/local_diary_entry.dart';
+import '../../data/models/local/local_food_model.dart';
 import '../../data/models/nutrition_summary.dart';
 import '../../data/models/food_model.dart';
 
 /// Provider untuk mengelola state Food Diary
 /// Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6
 /// Offline-first: selalu baca dari SQLite lokal, sync ke server saat online
+/// Custom food: input manual disimpan ke food database agar bisa dicari kembali
 class FoodDiaryProvider extends ChangeNotifier {
   final HttpClientService _httpClient;
   final LocalDiaryDataSource _localDiary;
@@ -61,7 +63,7 @@ class FoodDiaryProvider extends ChangeNotifier {
   bool get isOffline => _isOffline;
 
   /// Get entries grouped by meal time
-  /// Requirements: 4.4 - Mengkategorikan entri ke dalam slot waktu
+  /// Requirements: 4.4
   Map<String, List<DiaryEntry>> get entriesByMealTime {
     final Map<String, List<DiaryEntry>> grouped = {
       'breakfast': [],
@@ -69,25 +71,21 @@ class FoodDiaryProvider extends ChangeNotifier {
       'dinner': [],
       'snack': [],
     };
-
     for (final entry in _entries) {
       if (grouped.containsKey(entry.mealTime)) {
         grouped[entry.mealTime]!.add(entry);
       }
     }
-
     return grouped;
   }
 
   /// Set selected profile
-  /// Requirements: 4.1 - Dual profile support (baby and mother)
   void setSelectedProfile(String profile) {
     if (profile != 'baby' && profile != 'mother') {
       _errorMessage = 'Invalid profile type';
       notifyListeners();
       return;
     }
-
     if (_selectedProfile != profile) {
       _selectedProfile = profile;
       notifyListeners();
@@ -105,7 +103,7 @@ class FoodDiaryProvider extends ChangeNotifier {
   }
 
   // ============================================================
-  // HELPER: ambil local user ID dari secure storage
+  // HELPERS
   // ============================================================
 
   Future<int?> _getLocalUserId() async {
@@ -114,17 +112,11 @@ class FoodDiaryProvider extends ChangeNotifier {
     return int.tryParse(userIdStr);
   }
 
-  // ============================================================
-  // HELPER: konversi LocalDiaryEntry → DiaryEntry (untuk UI)
-  // ============================================================
-
   DiaryEntry _localToRemote(LocalDiaryEntry local) {
     return DiaryEntry(
-      // Pakai serverId kalau ada, fallback ke local id
       id: local.serverId ?? local.id.toString(),
       userId: local.userId.toString(),
       profileType: local.profileType,
-      foodId: local.serverId, // server food id tidak disimpan terpisah, pakai null
       customFoodName: local.customFoodName,
       servingSize: local.servingSize,
       mealTime: local.mealTime,
@@ -138,78 +130,57 @@ class FoodDiaryProvider extends ChangeNotifier {
     );
   }
 
-  // ============================================================
-  // HELPER: hitung nutrition summary dari list entries
-  // ============================================================
-
   NutritionSummary _calculateSummary(List<DiaryEntry> entries) {
-    double totalCalories = 0;
-    double totalProtein = 0;
-    double totalCarbs = 0;
-    double totalFat = 0;
-
+    double cal = 0, pro = 0, carb = 0, fat = 0;
     for (final e in entries) {
-      totalCalories += e.calories;
-      totalProtein += e.protein;
-      totalCarbs += e.carbs;
-      totalFat += e.fat;
+      cal += e.calories;
+      pro += e.protein;
+      carb += e.carbs;
+      fat += e.fat;
     }
-
-    return NutritionSummary(
-      calories: totalCalories,
-      protein: totalProtein,
-      carbs: totalCarbs,
-      fat: totalFat,
-    );
+    return NutritionSummary(calories: cal, protein: pro, carbs: carb, fat: fat);
   }
+
+  bool _isConnectionError(DioException e) =>
+      e.type == DioExceptionType.connectionError ||
+      e.type == DioExceptionType.connectionTimeout ||
+      e.type == DioExceptionType.receiveTimeout ||
+      e.type == DioExceptionType.sendTimeout;
 
   // ============================================================
   // LOAD ENTRIES — offline-first
   // ============================================================
 
-  /// Load diary entries: coba dari API dulu, fallback ke SQLite jika offline
-  /// Requirements: 4.1 - Mencatat makanan untuk dua profil terpisah
   Future<void> loadEntries() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      // === ONLINE: ambil dari API ===
       final dateStr = _formatDate(_selectedDate);
       final response = await _httpClient.get(
         ApiConstants.diary,
-        queryParameters: {
-          'profile': _selectedProfile,
-          'date': dateStr,
-        },
+        queryParameters: {'profile': _selectedProfile, 'date': dateStr},
       );
 
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data as Map<String, dynamic>;
-
-        // Parse entries dari server
         final entriesJson = data['entries'] as List<dynamic>?;
-        if (entriesJson != null) {
-          _entries = entriesJson
-              .map((json) => DiaryEntry.fromJson(json as Map<String, dynamic>))
-              .toList();
-        } else {
-          _entries = [];
-        }
+        _entries = entriesJson != null
+            ? entriesJson
+                .map((j) => DiaryEntry.fromJson(j as Map<String, dynamic>))
+                .toList()
+            : [];
 
-        // Parse nutrition summary dari server
         final summaryJson = data['nutrition_summary'] as Map<String, dynamic>?;
-        if (summaryJson != null) {
-          _nutritionSummary = NutritionSummary.fromJson(summaryJson);
-        } else {
-          _nutritionSummary = _calculateSummary(_entries);
-        }
+        _nutritionSummary = summaryJson != null
+            ? NutritionSummary.fromJson(summaryJson)
+            : _calculateSummary(_entries);
 
         _isOffline = false;
         _errorMessage = null;
 
-        // Simpan hasil server ke SQLite untuk akses offline berikutnya
+        // Cache ke SQLite untuk akses offline berikutnya
         await _cacheEntriesToLocal(_entries);
       } else {
         _errorMessage = 'Gagal memuat data diary';
@@ -217,25 +188,18 @@ class FoodDiaryProvider extends ChangeNotifier {
         _nutritionSummary = const NutritionSummary();
       }
     } on NetworkException {
-      // === OFFLINE: fallback ke SQLite ===
       await _loadFromLocal();
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.sendTimeout) {
-        // Tidak ada koneksi → fallback ke SQLite
+      if (_isConnectionError(e)) {
         await _loadFromLocal();
       } else if (e.response?.statusCode == 401) {
         _errorMessage = 'Sesi habis. Silakan login ulang.';
         _entries = [];
         _nutritionSummary = const NutritionSummary();
       } else {
-        // Error lain → coba lokal juga
         await _loadFromLocal();
       }
-    } catch (e) {
-      // Fallback ke lokal untuk semua error tak terduga
+    } catch (_) {
       await _loadFromLocal();
     } finally {
       _isLoading = false;
@@ -243,7 +207,6 @@ class FoodDiaryProvider extends ChangeNotifier {
     }
   }
 
-  /// Load entries dari SQLite lokal
   Future<void> _loadFromLocal() async {
     try {
       final userId = await _getLocalUserId();
@@ -253,33 +216,28 @@ class FoodDiaryProvider extends ChangeNotifier {
         _nutritionSummary = const NutritionSummary();
         return;
       }
-
       final localEntries = await _localDiary.getDiaryEntriesByDate(
         userId: userId,
         profileType: _selectedProfile,
         date: _selectedDate,
       );
-
       _entries = localEntries.map(_localToRemote).toList();
       _nutritionSummary = _calculateSummary(_entries);
       _isOffline = true;
-      // Tidak set errorMessage agar UI tidak tampilkan error — cukup tampilkan data lokal
       _errorMessage = null;
-    } catch (e) {
+    } catch (_) {
       _errorMessage = 'Tidak ada koneksi dan data lokal tidak tersedia.';
       _entries = [];
       _nutritionSummary = const NutritionSummary();
     }
   }
 
-  /// Simpan entries dari server ke SQLite (untuk cache offline)
   Future<void> _cacheEntriesToLocal(List<DiaryEntry> serverEntries) async {
     try {
       final userId = await _getLocalUserId();
       if (userId == null) return;
-
       for (final entry in serverEntries) {
-        final localEntry = LocalDiaryEntry(
+        await _localDiary.insertOrUpdateFromServer(LocalDiaryEntry(
           serverId: entry.id,
           userId: userId,
           profileType: entry.profileType,
@@ -294,21 +252,99 @@ class FoodDiaryProvider extends ChangeNotifier {
           createdAt: entry.createdAt,
           updatedAt: entry.updatedAt,
           syncStatus: 'synced',
-        );
-        await _localDiary.insertOrUpdateFromServer(localEntry);
+        ));
       }
+    } catch (_) {}
+  }
+
+  // ============================================================
+  // SAVE CUSTOM FOOD — inti fitur baru
+  // ============================================================
+
+  /// Simpan custom food ke server food database (POST /api/foods)
+  /// Kalau berhasil, return FoodModel dengan server ID
+  /// Kalau gagal/offline, return null
+  Future<FoodModel?> _saveCustomFoodToServer({
+    required String name,
+    required String category,
+    required double calories,
+    required double protein,
+    required double carbs,
+    required double fat,
+    double? estimatedPricePer100g,
+  }) async {
+    try {
+      final response = await _httpClient.post(
+        ApiConstants.foods,
+        data: {
+          'name': name,
+          'category': category,
+          'calories_per_100g': calories,
+          'protein_per_100g': protein,
+          'carbs_per_100g': carbs,
+          'fat_per_100g': fat,
+          if (estimatedPricePer100g != null)
+            'estimated_price_per_100g': estimatedPricePer100g,
+        },
+      );
+
+      // 201 = baru dibuat, 200 = sudah ada (server kembalikan yang existing)
+      if ((response.statusCode == 201 || response.statusCode == 200) &&
+          response.data != null) {
+        return FoodModel.fromJson(response.data as Map<String, dynamic>);
+      }
+      return null;
     } catch (_) {
-      // Cache gagal tidak fatal — tidak perlu tampilkan error ke user
+      return null;
+    }
+  }
+
+  /// Simpan custom food ke SQLite lokal
+  /// Return: serverId (kalau ada) atau 'local_food_{id}' (kalau offline)
+  Future<String?> _saveCustomFoodToLocal({
+    required String name,
+    required String category,
+    required double calories,
+    required double protein,
+    required double carbs,
+    required double fat,
+    double? estimatedPricePer100g,
+    String? serverId,
+    String syncStatus = 'pending',
+  }) async {
+    try {
+      final localFood = LocalFoodModel(
+        serverId: serverId,
+        name: name,
+        category: category,
+        caloriesPer100g: calories,
+        proteinPer100g: protein,
+        carbsPer100g: carbs,
+        fatPer100g: fat,
+        estimatedPricePer100g: estimatedPricePer100g,
+        createdAt: DateTime.now(),
+        syncStatus: syncStatus,
+      );
+      final localId = await _localFood.insertFood(localFood);
+      return serverId ?? 'local_food_$localId';
+    } catch (_) {
+      return null;
     }
   }
 
   // ============================================================
-  // ADD ENTRY — offline-first
+  // ADD ENTRY — offline-first + simpan custom food ke database
   // ============================================================
 
   /// Add new diary entry
-  /// Requirements: 4.2 - Memilih makanan dari database atau manual entry
-  /// Requirements: 4.3 - Menghitung dan memperbarui total nutrisi
+  /// Requirements: 4.2, 4.3
+  ///
+  /// Alur untuk input manual (customFoodName != null):
+  ///   Step 1 → Simpan ke food database (server atau SQLite lokal)
+  ///   Step 2 → Buat diary entry menggunakan food ID yang didapat
+  ///
+  /// Hasilnya: makanan yang pernah diinput manual bisa dicari kembali
+  /// melalui searchFoods() di sesi berikutnya.
   Future<bool> addEntry({
     required String profileType,
     String? foodId,
@@ -320,20 +356,19 @@ class FoodDiaryProvider extends ChangeNotifier {
     double? protein,
     double? carbs,
     double? fat,
+    double? estimatedPricePer100g, // field harga, opsional
   }) async {
-    // Validasi input
+    // --- Validasi input ---
     if (profileType != 'baby' && profileType != 'mother') {
       _errorMessage = 'Tipe profil tidak valid';
       notifyListeners();
       return false;
     }
-
     if (foodId == null && customFoodName == null) {
       _errorMessage = 'Pilih makanan atau masukkan nama makanan manual';
       notifyListeners();
       return false;
     }
-
     if (customFoodName != null &&
         (calories == null || protein == null || carbs == null || fat == null)) {
       _errorMessage = 'Nilai nutrisi wajib diisi untuk entri manual';
@@ -345,8 +380,59 @@ class FoodDiaryProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
 
+    // Category makanan mengikuti profile
+    final foodCategory = profileType == 'baby' ? 'mpasi' : 'ibu';
+
+    // ----------------------------------------------------------------
+    // STEP 1: Input manual → simpan ke food database
+    // ----------------------------------------------------------------
+    String? resolvedFoodId = foodId;
+
+    if (customFoodName != null) {
+      // Coba simpan ke server dulu
+      final savedFood = await _saveCustomFoodToServer(
+        name: customFoodName,
+        category: foodCategory,
+        calories: calories!,
+        protein: protein!,
+        carbs: carbs!,
+        fat: fat!,
+        estimatedPricePer100g: estimatedPricePer100g,
+      );
+
+      if (savedFood != null) {
+        // Online: dapat server ID, cache ke SQLite juga
+        resolvedFoodId = savedFood.id;
+        await _saveCustomFoodToLocal(
+          name: customFoodName,
+          category: foodCategory,
+          calories: calories,
+          protein: protein,
+          carbs: carbs,
+          fat: fat,
+          estimatedPricePer100g: estimatedPricePer100g,
+          serverId: savedFood.id,
+          syncStatus: 'synced',
+        );
+      } else {
+        // Offline: simpan lokal dengan status pending untuk di-sync nanti
+        resolvedFoodId = await _saveCustomFoodToLocal(
+          name: customFoodName,
+          category: foodCategory,
+          calories: calories,
+          protein: protein,
+          carbs: carbs,
+          fat: fat,
+          estimatedPricePer100g: estimatedPricePer100g,
+          syncStatus: 'pending',
+        );
+      }
+    }
+
+    // ----------------------------------------------------------------
+    // STEP 2: Buat diary entry
+    // ----------------------------------------------------------------
     try {
-      // === ONLINE: kirim ke API ===
       final Map<String, dynamic> requestData = {
         'profile_type': profileType,
         'serving_size': servingSize,
@@ -354,8 +440,13 @@ class FoodDiaryProvider extends ChangeNotifier {
         'entry_date': _formatDate(entryDate),
       };
 
-      if (foodId != null) {
-        requestData['food_id'] = foodId;
+      // Kalau dapat server food ID (UUID), pakai food_id
+      // Kalau masih local_ (offline), kirim sebagai custom_food_name
+      final isLocalFoodId =
+          resolvedFoodId == null || resolvedFoodId.startsWith('local_');
+
+      if (!isLocalFoodId) {
+        requestData['food_id'] = resolvedFoodId;
       } else {
         requestData['custom_food_name'] = customFoodName;
         requestData['calories'] = calories;
@@ -373,7 +464,6 @@ class FoodDiaryProvider extends ChangeNotifier {
         final newEntry =
             DiaryEntry.fromJson(response.data as Map<String, dynamic>);
 
-        // Tambahkan ke UI list
         if (newEntry.profileType == _selectedProfile &&
             _isSameDate(newEntry.entryDate, _selectedDate)) {
           _entries.add(newEntry);
@@ -385,7 +475,6 @@ class FoodDiaryProvider extends ChangeNotifier {
           );
         }
 
-        // Simpan ke SQLite dengan status 'synced'
         await _saveSingleEntryLocal(newEntry, syncStatus: 'synced');
 
         _isOffline = false;
@@ -400,10 +489,8 @@ class FoodDiaryProvider extends ChangeNotifier {
         return false;
       }
     } on NetworkException {
-      // === OFFLINE: simpan lokal dengan status pending ===
       return await _addEntryOffline(
         profileType: profileType,
-        foodId: foodId,
         customFoodName: customFoodName,
         servingSize: servingSize,
         mealTime: mealTime,
@@ -414,14 +501,9 @@ class FoodDiaryProvider extends ChangeNotifier {
         fat: fat ?? 0,
       );
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.sendTimeout) {
-        // Tidak ada koneksi → simpan offline
+      if (_isConnectionError(e)) {
         return await _addEntryOffline(
           profileType: profileType,
-          foodId: foodId,
           customFoodName: customFoodName,
           servingSize: servingSize,
           mealTime: mealTime,
@@ -453,10 +535,8 @@ class FoodDiaryProvider extends ChangeNotifier {
     }
   }
 
-  /// Simpan entry ke SQLite saat offline (sync_status = 'pending')
   Future<bool> _addEntryOffline({
     required String profileType,
-    String? foodId,
     String? customFoodName,
     required double servingSize,
     required String mealTime,
@@ -476,7 +556,7 @@ class FoodDiaryProvider extends ChangeNotifier {
       }
 
       final now = DateTime.now();
-      final localEntry = LocalDiaryEntry(
+      final localId = await _localDiary.insertDiaryEntry(LocalDiaryEntry(
         userId: userId,
         profileType: profileType,
         customFoodName: customFoodName,
@@ -489,13 +569,9 @@ class FoodDiaryProvider extends ChangeNotifier {
         entryDate: entryDate,
         createdAt: now,
         updatedAt: now,
-        syncStatus: 'pending', // akan di-sync saat online
-      );
+        syncStatus: 'pending',
+      ));
 
-      final localId = await _localDiary.insertDiaryEntry(localEntry);
-
-      // Buat DiaryEntry sementara untuk ditampilkan di UI
-      // id-nya pakai local id sebagai string prefix "local_"
       final tempEntry = DiaryEntry(
         id: 'local_$localId',
         userId: userId.toString(),
@@ -515,8 +591,8 @@ class FoodDiaryProvider extends ChangeNotifier {
       if (tempEntry.profileType == _selectedProfile &&
           _isSameDate(tempEntry.entryDate, _selectedDate)) {
         _entries.add(tempEntry);
-        _nutritionSummary = _nutritionSummary.add(
-            calories, protein, carbs, fat);
+        _nutritionSummary =
+            _nutritionSummary.add(calories, protein, carbs, fat);
       }
 
       _isOffline = true;
@@ -532,14 +608,12 @@ class FoodDiaryProvider extends ChangeNotifier {
     }
   }
 
-  /// Helper: simpan satu DiaryEntry (dari server) ke SQLite
   Future<void> _saveSingleEntryLocal(DiaryEntry entry,
       {String syncStatus = 'synced'}) async {
     try {
       final userId = await _getLocalUserId();
       if (userId == null) return;
-
-      final localEntry = LocalDiaryEntry(
+      await _localDiary.insertOrUpdateFromServer(LocalDiaryEntry(
         serverId: entry.id,
         userId: userId,
         profileType: entry.profileType,
@@ -554,25 +628,21 @@ class FoodDiaryProvider extends ChangeNotifier {
         createdAt: entry.createdAt,
         updatedAt: entry.updatedAt,
         syncStatus: syncStatus,
-      );
-      await _localDiary.insertOrUpdateFromServer(localEntry);
-    } catch (_) {
-      // Tidak fatal
-    }
+      ));
+    } catch (_) {}
   }
 
   // ============================================================
-  // DELETE ENTRY — offline-first
+  // DELETE ENTRY
   // ============================================================
 
   /// Delete diary entry
-  /// Requirements: 4.5 - Mengurangi total nutrisi saat entry dihapus
+  /// Requirements: 4.5
   Future<bool> deleteEntry(String entryId) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
-    // Temukan entry sebelum dihapus
     DiaryEntry? entryToDelete;
     try {
       entryToDelete = _entries.firstWhere((e) => e.id == entryId);
@@ -583,12 +653,10 @@ class FoodDiaryProvider extends ChangeNotifier {
       return false;
     }
 
-    // Entry lokal (belum pernah sync ke server) — langsung hapus dari SQLite
+    // Entry lokal yang belum pernah ke server → langsung hard delete
     if (entryId.startsWith('local_')) {
       final localId = int.tryParse(entryId.replaceFirst('local_', ''));
-      if (localId != null) {
-        await _localDiary.hardDeleteDiaryEntry(localId);
-      }
+      if (localId != null) await _localDiary.hardDeleteDiaryEntry(localId);
       _entries.removeWhere((e) => e.id == entryId);
       _nutritionSummary = _nutritionSummary.remove(
         entryToDelete.calories,
@@ -602,7 +670,6 @@ class FoodDiaryProvider extends ChangeNotifier {
     }
 
     try {
-      // === ONLINE: kirim DELETE ke API ===
       final response =
           await _httpClient.delete('${ApiConstants.diary}/$entryId');
 
@@ -614,10 +681,6 @@ class FoodDiaryProvider extends ChangeNotifier {
           entryToDelete.carbs,
           entryToDelete.fat,
         );
-
-        // Hapus dari SQLite juga
-        await _deleteLocalByServerId(entryId);
-
         _errorMessage = null;
         _isLoading = false;
         notifyListeners();
@@ -629,13 +692,9 @@ class FoodDiaryProvider extends ChangeNotifier {
         return false;
       }
     } on NetworkException {
-      // === OFFLINE: soft delete lokal (tandai deleted_at, sync_status = pending) ===
       return await _deleteEntryOffline(entryId, entryToDelete);
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.sendTimeout) {
+      if (_isConnectionError(e)) {
         return await _deleteEntryOffline(entryId, entryToDelete);
       } else if (e.response?.statusCode == 404) {
         _errorMessage = 'Entri tidak ditemukan di server';
@@ -655,13 +714,10 @@ class FoodDiaryProvider extends ChangeNotifier {
     }
   }
 
-  /// Soft delete entry di SQLite saat offline
   Future<bool> _deleteEntryOffline(
       String serverId, DiaryEntry entryToDelete) async {
     try {
       await _softDeleteLocalByServerId(serverId);
-
-      // Hapus dari UI list langsung
       _entries.removeWhere((e) => e.id == serverId);
       _nutritionSummary = _nutritionSummary.remove(
         entryToDelete.calories,
@@ -669,7 +725,6 @@ class FoodDiaryProvider extends ChangeNotifier {
         entryToDelete.carbs,
         entryToDelete.fat,
       );
-
       _isOffline = true;
       _errorMessage = null;
       _isLoading = false;
@@ -683,63 +738,23 @@ class FoodDiaryProvider extends ChangeNotifier {
     }
   }
 
-  /// Cari local entry berdasarkan serverId lalu soft delete
   Future<void> _softDeleteLocalByServerId(String serverId) async {
-    final db = await _getLocalEntryIdByServerId(serverId);
-    if (db != null) {
-      await _localDiary.deleteDiaryEntry(db);
-    }
-  }
-
-  /// Hapus (hard delete) entry lokal berdasarkan serverId
-  Future<void> _deleteLocalByServerId(String serverId) async {
-    final localId = await _getLocalEntryIdByServerId(serverId);
-    if (localId != null) {
-      await _localDiary.hardDeleteDiaryEntry(localId);
-    }
-  }
-
-  /// Dapatkan local SQLite id berdasarkan serverId
-  Future<int?> _getLocalEntryIdByServerId(String serverId) async {
     try {
-      final userId = await _getLocalUserId();
-      if (userId == null) return null;
-
-      // Cari di entries saat ini
-      final match = _entries.firstWhere(
-        (e) => e.id == serverId,
-        orElse: () => DiaryEntry(
-          id: '',
-          userId: '',
-          profileType: '',
-          servingSize: 0,
-          mealTime: '',
-          calories: 0,
-          protein: 0,
-          carbs: 0,
-          fat: 0,
-          entryDate: DateTime.now(),
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
-      );
-
-      if (match.id.isEmpty) return null;
-
-      // Tidak ada cara langsung, gunakan getPendingSyncEntries sebagai workaround
-      // Implementasi lebih lengkap bisa tambahkan method getByServerId ke LocalDiaryDataSource
-      return null;
-    } catch (_) {
-      return null;
-    }
+      final pending = await _localDiary.getPendingSyncEntries();
+      final match = pending.where((e) => e.serverId == serverId).toList();
+      if (match.isNotEmpty) {
+        await _localDiary.deleteDiaryEntry(match.first.id!);
+      }
+    } catch (_) {}
   }
 
   // ============================================================
-  // SEARCH FOODS — offline-first
+  // SEARCH FOODS — termasuk custom foods yang pernah diinput
   // ============================================================
 
   /// Search foods: coba API dulu, fallback ke SQLite lokal
-  /// Requirements: 4.2 - Memilih makanan dari Food_Database
+  /// Hasil pencarian MENCAKUP makanan custom yang pernah diinput manual
+  /// karena sudah disimpan ke tabel foods (bukan hanya diary_entries)
   Future<void> searchFoods(String query, {String? category}) async {
     if (query.isEmpty) {
       _searchResults = [];
@@ -755,7 +770,6 @@ class FoodDiaryProvider extends ChangeNotifier {
         category ?? (_selectedProfile == 'baby' ? 'mpasi' : 'ibu');
 
     try {
-      // === ONLINE: cari dari API ===
       final response = await _httpClient.get(
         ApiConstants.foods,
         queryParameters: {
@@ -768,31 +782,24 @@ class FoodDiaryProvider extends ChangeNotifier {
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data as Map<String, dynamic>;
         final foodsJson = data['foods'] as List<dynamic>?;
-
-        if (foodsJson != null) {
-          _searchResults = foodsJson
-              .map((json) => FoodModel.fromJson(json as Map<String, dynamic>))
-              .toList();
-        } else {
-          _searchResults = [];
-        }
+        _searchResults = foodsJson != null
+            ? foodsJson
+                .map((j) => FoodModel.fromJson(j as Map<String, dynamic>))
+                .toList()
+            : [];
         _errorMessage = null;
       } else {
         _searchResults = [];
       }
     } on NetworkException {
-      // === OFFLINE: cari dari SQLite lokal ===
       await _searchFoodsLocal(query, searchCategory);
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionError ||
-          e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.sendTimeout) {
+      if (_isConnectionError(e)) {
         await _searchFoodsLocal(query, searchCategory);
       } else {
         _searchResults = [];
       }
-    } catch (e) {
+    } catch (_) {
       await _searchFoodsLocal(query, searchCategory);
     } finally {
       _isLoadingFoods = false;
@@ -800,7 +807,6 @@ class FoodDiaryProvider extends ChangeNotifier {
     }
   }
 
-  /// Cari makanan dari SQLite saat offline
   Future<void> _searchFoodsLocal(String query, String category) async {
     try {
       final localFoods =
@@ -827,26 +833,22 @@ class FoodDiaryProvider extends ChangeNotifier {
   // UTILS
   // ============================================================
 
-  /// Clear search results
   void clearSearchResults() {
     _searchResults = [];
     notifyListeners();
   }
 
-  /// Clear error message
   void clearError() {
     _errorMessage = null;
     notifyListeners();
   }
 
-  /// Format date as YYYY-MM-DD
   String _formatDate(DateTime date) {
     return '${date.year.toString().padLeft(4, '0')}-'
         '${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}';
   }
 
-  /// Check if two dates are the same day
   bool _isSameDate(DateTime date1, DateTime date2) {
     return date1.year == date2.year &&
         date1.month == date2.month &&
