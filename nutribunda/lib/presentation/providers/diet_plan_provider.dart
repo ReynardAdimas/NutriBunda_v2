@@ -1,3 +1,5 @@
+import 'package:nutribunda/data/datasources/local/local_steps_datasource.dart';
+
 import 'base_provider.dart';
 import '../../data/models/user_model.dart';
 import '../../core/services/pedometer_service.dart';
@@ -16,6 +18,13 @@ class DietPlanProvider extends BaseProvider {
   
   // User data untuk kalkulasi
   UserModel? _user;
+
+  final LocalStepsDatasource _localStepsDatasource;
+  int? _currentUserId; 
+
+  DietPlanProvider(this._localStepsDatasource);
+
+  DateTime? _lastTrackedDate;
   
   // Pedometer service
   final PedometerService _pedometerService = PedometerService();
@@ -57,6 +66,10 @@ class DietPlanProvider extends BaseProvider {
         _user!.age != null;
   }
   
+  void setCurrentUserId(int userId) {
+    _currentUserId = userId;
+  }
+
   /// Get missing profile data fields
   List<String> get missingProfileData {
     final missing = <String>[];
@@ -191,10 +204,20 @@ class DietPlanProvider extends BaseProvider {
     // Automatically recalculate
     calculateAll();
   }
+  
+  void _checkAndResetForNewDay() {
+    final today = DateTime.now(); 
+    final todayDate = DateTime(today.year, today.month, today.day); 
 
+    if(_lastTrackedDate != null && _lastTrackedDate!.isBefore(todayDate)) {
+      resetDailySteps();
+    }
+    _lastTrackedDate = todayDate;
+  }
   /// Update steps and calculate calories burned
   /// Requirements: 5.6, 5.7 - Menghitung kalori terbakar dari langkah
   void updateSteps(int steps) {
+    _checkAndResetForNewDay();
     _steps = steps;
     
     if (_user == null || _user!.weight == null) {
@@ -209,6 +232,53 @@ class DietPlanProvider extends BaseProvider {
     _caloriesBurned = steps * 0.04 * weight / 1000;
     
     safeNotifyListeners();
+
+    if (steps %10==0 || steps == 0) {
+      _saveTodayStepsLocally();
+    }
+  }
+
+  Future<void> _saveTodayStepsLocally() async {
+    if(_currentUserId == null) return; 
+
+    final today = DateTime.now(); 
+    final dateStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    try {
+      await _localStepsDatasource.saveOrUpdateDailySteps(
+        userId: _currentUserId!, 
+        date: dateStr, 
+        steps: _steps, 
+        caloriesBurned: _caloriesBurned
+      );
+    } catch (e) {
+      throw Exception();
+    }
+  }
+
+  Future<void> loadTodaySteps() async {
+    if(_currentUserId == null) return; 
+
+    final today = DateTime.now();
+    final dateStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
+    try {
+      final data = await _localStepsDatasource.getDailySteps(
+        userId: _currentUserId!, 
+        date: dateStr
+      );
+
+      if(data != null) {
+        _steps = data['steps'] as int; 
+        _caloriesBurned = (data['calories_burned'] as num).toDouble(); 
+        safeNotifyListeners();
+      }
+    } catch (e) {
+      throw Exception();
+    }
+  }
+
+  Future<void> forceSaveSteps() async {
+    await _saveTodayStepsLocally();
   }
   
   /// Start pedometer tracking

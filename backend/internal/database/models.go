@@ -107,6 +107,26 @@ type Notification struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+// DailySteps represents pedometer data per day per user
+type DailySteps struct {
+    ID             uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+    UserID         uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
+    User           User      `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"-"`
+    Date           time.Time `gorm:"type:date;not null" json:"date"`
+    Steps          int       `gorm:"not null;default:0" json:"steps"`
+    CaloriesBurned float64   `gorm:"type:decimal(7,2);not null;default:0" json:"calories_burned"`
+    CreatedAt      time.Time `json:"created_at"`
+    UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// BeforeCreate hook for DailySteps
+func (d *DailySteps) BeforeCreate(tx *gorm.DB) error {
+    if d.ID == uuid.Nil {
+        d.ID = uuid.New()
+    }
+    return nil
+}
+
 // BeforeCreate hook for User to generate UUID
 func (u *User) BeforeCreate(tx *gorm.DB) error {
 	if u.ID == uuid.Nil {

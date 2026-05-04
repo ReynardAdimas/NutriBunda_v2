@@ -182,6 +182,21 @@ class DatabaseHelper {
       )
     ''');
 
+    // Daily step table 
+    await db.execute('''
+      CREATE TABLE daily_steps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        steps INTEGER NOT NULL DEFAULT 0,
+        calories_burned REAL NOT NULL DEFAULT 0.0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(user_id, date)
+      )
+      ''');
+
     // Sync metadata table
     await db.execute('''
       CREATE TABLE sync_metadata (
@@ -189,7 +204,7 @@ class DatabaseHelper {
         table_name TEXT UNIQUE NOT NULL,
         last_sync_at TEXT NOT NULL
       )
-    ''');
+    '''); 
   }
 
   /// Upgrade database schema

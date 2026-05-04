@@ -43,6 +43,7 @@ func RunMigrations(db *gorm.DB) error {
 		&FavoriteRecipe{},
 		&QuizQuestion{},
 		&Notification{},
+		&DailySteps{},
 	)
 	
 	if err != nil {

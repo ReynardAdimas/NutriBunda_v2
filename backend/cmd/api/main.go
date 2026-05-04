@@ -12,6 +12,7 @@ import (
 	"nutribunda-backend/internal/quiz"
 	"nutribunda-backend/internal/recipe"
 	"nutribunda-backend/internal/user"
+	"nutribunda-backend/internal/steps"
 
 	"github.com/gin-gonic/gin"
 )
@@ -42,6 +43,8 @@ func main() {
 	recipeService := recipe.NewService(db)
 	diaryService := diary.NewService(db)
 	quizService := quiz.NewService(db)
+	stepsService := steps.NewService(db)
+	stepsHandler := steps.NewHandler(stepsService)
 
 	// Initialize handlers
 	authHandler := auth.NewHandler(authService)
@@ -142,6 +145,14 @@ func main() {
 			currencyRoutes.GET("/supported", currencyHandler.GetSupportedCurrencies)
 			currencyRoutes.GET("/rate", currencyHandler.GetExchangeRate)
 			currencyRoutes.POST("/convert", currencyHandler.ConvertPrice)
+		}
+
+		// Step routes 
+		stepsRoutes := api.Group("/steps")
+		stepsRoutes.Use(auth.JWTMiddleware(authService))
+		{
+			stepsRoutes.POST("", stepsHandler.UpsertSteps)
+			stepsRoutes.GET("", stepsHandler.GetSteps)
 		}
 	}
 
