@@ -1,5 +1,4 @@
 import 'package:nutribunda/data/datasources/local/local_steps_datasource.dart';
-
 import 'base_provider.dart';
 import '../../data/models/user_model.dart';
 import '../../core/services/pedometer_service.dart';
@@ -22,7 +21,7 @@ class DietPlanProvider extends BaseProvider {
   final LocalStepsDatasource _localStepsDatasource;
   int? _currentUserId; 
 
-  DietPlanProvider(this._localStepsDatasource);
+  DietPlanProvider(this._localStepsDatasource, );
 
   DateTime? _lastTrackedDate;
   
@@ -214,6 +213,7 @@ class DietPlanProvider extends BaseProvider {
     }
     _lastTrackedDate = todayDate;
   }
+  
   /// Update steps and calculate calories burned
   /// Requirements: 5.6, 5.7 - Menghitung kalori terbakar dari langkah
   void updateSteps(int steps) {
@@ -233,7 +233,7 @@ class DietPlanProvider extends BaseProvider {
     
     safeNotifyListeners();
 
-    if (steps %10==0 || steps == 0) {
+    if (steps % 10 == 0 || steps == 0) {
       _saveTodayStepsLocally();
     }
   }
@@ -255,6 +255,7 @@ class DietPlanProvider extends BaseProvider {
     }
   }
 
+  /// PERUBAHAN LANGKAH 2: Modifikasi loadTodaySteps()
   Future<void> loadTodaySteps() async {
     if(_currentUserId == null) return; 
 
@@ -272,8 +273,15 @@ class DietPlanProvider extends BaseProvider {
         _caloriesBurned = (data['calories_burned'] as num).toDouble(); 
         safeNotifyListeners();
       }
+      
+      // KUNCI: Langsung jalankan pedometer dengan inject data SQLite setelah data berhasil diload.
+      // Ini akan mencegah sensor me-reset data yang baru saja dibaca ke 0.
+      startPedometerTracking();
+
     } catch (e) {
-      throw Exception();
+      // Jika error membaca DB, tetap jalankan sensor dari 0
+      startPedometerTracking();
+      print('DietPlanProvider: Error loading steps - $e');
     }
   }
 
@@ -282,15 +290,17 @@ class DietPlanProvider extends BaseProvider {
   }
   
   /// Start pedometer tracking
+  /// PERUBAHAN LANGKAH 2: Masukkan parameter savedDailySteps
   /// Requirements: 5.6 - Menghitung langkah kaki secara real-time
   void startPedometerTracking() {
     if (_pedometerService.isListening) {
       return;
     }
     
+    // Inject _steps yang ada saat ini (baik 0 maupun data dari DB) ke PedometerService
     _pedometerService.startListening((steps) {
       updateSteps(steps);
-    });
+    }, savedDailySteps: _steps);
   }
   
   /// Stop pedometer tracking

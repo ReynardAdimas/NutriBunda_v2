@@ -10,6 +10,7 @@ class PedometerService {
   
   int _initialSteps = 0;
   int _currentSteps = 0;
+  int _savedSteps = 0; 
   String _pedestrianStatus = 'unknown';
   String? _errorMessage;
   
@@ -25,11 +26,13 @@ class PedometerService {
   
   /// Start listening to step count updates
   /// Requirements: 5.6 - Menghitung langkah kaki secara real-time
-  void startListening(Function(int steps) onStepUpdate) {
+  void startListening(Function(int steps) onStepUpdate, {int savedDailySteps=0}) {
     if (_isListening) {
       debugPrint('PedometerService: Already listening');
       return;
     }
+
+    _savedSteps = savedDailySteps;
     
     try {
       // Listen to step count stream
@@ -43,12 +46,12 @@ class PedometerService {
           }
           
           // Calculate current steps relative to initial
-          _currentSteps = event.steps - _initialSteps;
+          _currentSteps = (event.steps - _initialSteps) + _savedSteps;
           
           // Ensure steps don't go negative (can happen on device restart)
           if (_currentSteps < 0) {
             _initialSteps = event.steps;
-            _currentSteps = 0;
+            _currentSteps = _savedSteps;
           }
           
           debugPrint('PedometerService: Steps updated to $_currentSteps (total: ${event.steps})');
