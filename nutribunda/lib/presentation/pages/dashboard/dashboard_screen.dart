@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../providers/food_diary_provider.dart';
 import '../../providers/diet_plan_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/profile_provider.dart';
 import '../../widgets/dashboard/nutrition_progress_bar.dart';
 import '../../widgets/dashboard/nutrition_chart.dart';
 import '../../widgets/shake_to_recipe_widget.dart';
@@ -240,8 +241,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // Baby nutrition summary
               if (_babySummary != null)
                 Builder(builder: (ctx) {
-                  // Ambil data bayi dari AuthProvider / ProfileProvider
-                  final user = context.read<AuthProvider>().user;
+                  // watch ProfileProvider agar Builder rebuild otomatis
+                  // saat data bayi berubah setelah edit profil
+                  final profileUser = ctx.watch<ProfileProvider>().user;
+                  final authUser    = ctx.read<AuthProvider>().user;
+                  final user        = profileUser ?? authUser;
                   final babyAge = BabyNutritionService.getAgeInMonths(
                     user?.babyBirthDate,
                   );

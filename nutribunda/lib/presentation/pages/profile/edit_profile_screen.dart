@@ -3,10 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../providers/profile_provider.dart';
-import '../../providers/auth_provider.dart';
 
-/// Edit Profile Screen dengan form untuk edit data profil dan upload foto
-/// Requirements: 12.1, 12.2, 12.3, 12.4, 12.5 - Edit profil dan upload foto
+/// Edit Profile Screen
+/// Requirements: 12.1, 12.2, 12.3, 12.4, 12.5
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -16,43 +15,42 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _weightController = TextEditingController();
-  final _heightController = TextEditingController();
-  final _ageController = TextEditingController();
+  final _nameController     = TextEditingController();
+  final _weightController   = TextEditingController();
+  final _heightController   = TextEditingController();
+  final _ageController      = TextEditingController();
   final _babyWeightController = TextEditingController();
 
   bool _isBreastfeeding = false;
   String _activityLevel = 'sedentary';
-  String _timezone = 'WIB';
-
-  // Data bayi
+  String _timezone      = 'WIB';
   DateTime? _babyBirthDate;
 
+  bool _isInitialized = false;
+
   @override
-  void initState() {
-    super.initState();
-    _loadUserData();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Hanya load sekali saat pertama kali
+    if (!_isInitialized) {
+      _loadUserData();
+      _isInitialized = true;
+    }
   }
 
   void _loadUserData() {
-    // Baca dari AuthProvider karena dashboard juga membaca dari sini
-    final authProvider = context.read<AuthProvider>();
-    final user = authProvider.user ??
-        context.read<ProfileProvider>().user; // fallback ke ProfileProvider
-
+    // ProfileProvider adalah sumber kebenaran tunggal untuk halaman profil
+    final user = context.read<ProfileProvider>().user;
     if (user != null) {
-      _nameController.text = user.fullName;
-      _weightController.text = user.weight?.toString() ?? '';
-      _heightController.text = user.height?.toString() ?? '';
-      _ageController.text = user.age?.toString() ?? '';
-      _isBreastfeeding = user.isBreastfeeding;
-      _activityLevel = user.activityLevel;
-      _timezone = user.timezone;
-
-      // Load baby data
-      _babyBirthDate = user.babyBirthDate;
-      _babyWeightController.text = user.babyWeightKg?.toString() ?? '';
+      _nameController.text        = user.fullName;
+      _weightController.text      = user.weight?.toString() ?? '';
+      _heightController.text      = user.height?.toString() ?? '';
+      _ageController.text         = user.age?.toString() ?? '';
+      _isBreastfeeding            = user.isBreastfeeding;
+      _activityLevel              = user.activityLevel;
+      _timezone                   = user.timezone;
+      _babyBirthDate              = user.babyBirthDate;
+      _babyWeightController.text  = user.babyWeightKg?.toString() ?? '';
     }
   }
 
@@ -66,90 +64,72 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  /// Tampilkan date picker untuk tanggal lahir bayi
   Future<void> _selectBabyBirthDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
       initialDate: _babyBirthDate ?? now.subtract(const Duration(days: 180)),
-      firstDate: now.subtract(const Duration(days: 730)), // maks 2 tahun lalu
+      firstDate: now.subtract(const Duration(days: 730)),
       lastDate: now,
       helpText: 'Pilih Tanggal Lahir Bayi',
       cancelText: 'Batal',
       confirmText: 'Pilih',
     );
-    if (picked != null) {
-      setState(() {
-        _babyBirthDate = picked;
-      });
-    }
+    if (picked != null) setState(() => _babyBirthDate = picked);
   }
 
-  /// Format tanggal lahir bayi untuk ditampilkan
-  String _formatBabyBirthDate(DateTime date) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
-      'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
-    ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
+  String _formatDate(DateTime d) {
+    const m = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+    return '${d.day} ${m[d.month - 1]} ${d.year}';
   }
 
-  /// Hitung usia bayi dalam bulan sebagai helper text
-  String? _getBabyAgeLabel() {
+  String? _babyAgeLabel() {
     if (_babyBirthDate == null) return null;
     final now = DateTime.now();
-    final months =
-        (now.year - _babyBirthDate!.year) * 12 +
+    final months = (now.year - _babyBirthDate!.year) * 12 +
         (now.month - _babyBirthDate!.month);
     if (months < 0) return null;
-    if (months < 24) return '$months bulan';
-    return '${months ~/ 12} tahun ${months % 12} bulan';
+    return months < 24 ? '$months bulan' : '${months ~/ 12} thn ${months % 12} bln';
   }
 
-  /// Save profile changes
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
-    // Gunakan AuthProvider agar _user di dalamnya terupdate,
-    // sehingga dashboard_screen yang membaca AuthProvider.user
-    // langsung mendapat data bayi terbaru tanpa perlu restart.
-    final authProvider = context.read<AuthProvider>();
+    final provider = context.read<ProfileProvider>();
 
-    final weight = double.tryParse(_weightController.text);
-    final height = double.tryParse(_heightController.text);
-    final age = int.tryParse(_ageController.text);
-    final babyWeightKg = _babyWeightController.text.isNotEmpty
+    final weight      = double.tryParse(_weightController.text);
+    final height      = double.tryParse(_heightController.text);
+    final age         = int.tryParse(_ageController.text);
+    final babyWeight  = _babyWeightController.text.isNotEmpty
         ? double.tryParse(_babyWeightController.text)
         : null;
 
-    final success = await authProvider.updateProfile(
-      fullName: _nameController.text,
-      weight: weight,
-      height: height,
-      age: age,
+    final success = await provider.updateProfile(
+      fullName:        _nameController.text,
+      weight:          weight,
+      height:          height,
+      age:             age,
       isBreastfeeding: _isBreastfeeding,
-      activityLevel: _activityLevel,
-      timezone: _timezone,
-      babyBirthDate: _babyBirthDate,
-      babyWeightKg: babyWeightKg,
+      activityLevel:   _activityLevel,
+      timezone:        _timezone,
+      babyBirthDate:   _babyBirthDate,
+      babyWeightKg:    babyWeight,
     );
 
     if (!mounted) return;
 
     if (success) {
+      // Re-fetch agar ProfileProvider punya data terbaru dari server
+      await provider.fetchProfile();
+
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profil berhasil diperbarui')),
       );
       Navigator.pop(context);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            authProvider.errorMessage ?? 'Gagal memperbarui profil',
-          ),
-        ),
+        SnackBar(content: Text(provider.errorMessage ?? 'Gagal memperbarui profil')),
       );
     }
   }
@@ -162,12 +142,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
       ),
-      body: Consumer<AuthProvider>(
-        builder: (context, authProvider, child) {
-          if (authProvider.isLoading) {
+      body: Consumer<ProfileProvider>(
+        builder: (context, provider, _) {
+          if (provider.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
-
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Form(
@@ -176,7 +155,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
 
-                  // Name Field
+                  // ── Nama ────────────────────────────────────────────────
                   TextFormField(
                     controller: _nameController,
                     decoration: const InputDecoration(
@@ -184,167 +163,132 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.person),
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Nama lengkap tidak boleh kosong';
-                      }
-                      return null;
-                    },
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Nama tidak boleh kosong' : null,
                   ),
-
                   const SizedBox(height: 16),
 
-                  // Weight Field
+                  // ── Berat Badan Ibu ──────────────────────────────────────
                   TextFormField(
                     controller: _weightController,
                     decoration: const InputDecoration(
                       labelText: 'Berat Badan (kg)',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.monitor_weight),
-                      helperText: 'Rentang: 30-200 kg',
+                      helperText: 'Rentang: 30–200 kg',
                     ),
                     keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return null;
-                      final weight = double.tryParse(value);
-                      if (weight == null) return 'Masukkan angka yang valid';
-                      if (weight < 30 || weight > 200) {
-                        return 'Berat badan harus antara 30-200 kg';
-                      }
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return null;
+                      final w = double.tryParse(v);
+                      if (w == null) return 'Masukkan angka yang valid';
+                      if (w < 30 || w > 200) return 'Harus antara 30–200 kg';
                       return null;
                     },
                   ),
-
                   const SizedBox(height: 16),
 
-                  // Height Field
+                  // ── Tinggi Badan ─────────────────────────────────────────
                   TextFormField(
                     controller: _heightController,
                     decoration: const InputDecoration(
                       labelText: 'Tinggi Badan (cm)',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.height),
-                      helperText: 'Rentang: 100-250 cm',
+                      helperText: 'Rentang: 100–250 cm',
                     ),
                     keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return null;
-                      final height = double.tryParse(value);
-                      if (height == null) return 'Masukkan angka yang valid';
-                      if (height < 100 || height > 250) {
-                        return 'Tinggi badan harus antara 100-250 cm';
-                      }
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return null;
+                      final h = double.tryParse(v);
+                      if (h == null) return 'Masukkan angka yang valid';
+                      if (h < 100 || h > 250) return 'Harus antara 100–250 cm';
                       return null;
                     },
                   ),
-
                   const SizedBox(height: 16),
 
-                  // Age Field
+                  // ── Usia ─────────────────────────────────────────────────
                   TextFormField(
                     controller: _ageController,
                     decoration: const InputDecoration(
                       labelText: 'Usia (tahun)',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.cake),
-                      helperText: 'Rentang: 15-60 tahun',
+                      helperText: 'Rentang: 15–60 tahun',
                     ),
                     keyboardType: TextInputType.number,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return null;
-                      final age = int.tryParse(value);
-                      if (age == null) return 'Masukkan angka yang valid';
-                      if (age < 15 || age > 60) {
-                        return 'Usia harus antara 15-60 tahun';
-                      }
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return null;
+                      final a = int.tryParse(v);
+                      if (a == null) return 'Masukkan angka yang valid';
+                      if (a < 15 || a > 60) return 'Harus antara 15–60 tahun';
                       return null;
                     },
                   ),
-
                   const SizedBox(height: 16),
 
-                  // Breastfeeding Status
+                  // ── Status Menyusui ──────────────────────────────────────
                   Card(
                     child: SwitchListTile(
                       title: const Text('Status Menyusui'),
                       subtitle: const Text('Sedang menyusui'),
                       value: _isBreastfeeding,
-                      onChanged: (value) {
-                        setState(() => _isBreastfeeding = value);
-                      },
+                      onChanged: (v) => setState(() => _isBreastfeeding = v),
                     ),
                   ),
-
                   const SizedBox(height: 16),
 
-                  // Activity Level Dropdown
+                  // ── Tingkat Aktivitas ────────────────────────────────────
                   DropdownButtonFormField<String>(
-                    initialValue: _activityLevel,
+                    value: _activityLevel,
                     decoration: const InputDecoration(
                       labelText: 'Tingkat Aktivitas',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.directions_run),
                     ),
                     items: const [
-                      DropdownMenuItem(
-                        value: 'sedentary',
-                        child: Text('Sedentary (Tidak Aktif)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'lightly_active',
-                        child: Text('Lightly Active (Ringan)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'moderately_active',
-                        child: Text('Moderately Active (Sedang)'),
-                      ),
+                      DropdownMenuItem(value: 'sedentary',         child: Text('Sedentary (Tidak Aktif)')),
+                      DropdownMenuItem(value: 'lightly_active',    child: Text('Lightly Active (Ringan)')),
+                      DropdownMenuItem(value: 'moderately_active', child: Text('Moderately Active (Sedang)')),
                     ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _activityLevel = value);
-                    },
+                    onChanged: (v) { if (v != null) setState(() => _activityLevel = v); },
                   ),
-
                   const SizedBox(height: 16),
 
-                  // Timezone Dropdown
+                  // ── Zona Waktu ───────────────────────────────────────────
                   DropdownButtonFormField<String>(
-                    initialValue: _timezone,
+                    value: _timezone,
                     decoration: const InputDecoration(
                       labelText: 'Zona Waktu',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.access_time),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'WIB', child: Text('WIB (UTC+7)')),
-                      DropdownMenuItem(value: 'WITA', child: Text('WITA (UTC+8)')),
-                      DropdownMenuItem(value: 'WIT', child: Text('WIT (UTC+9)')),
+                      DropdownMenuItem(value: 'WIB',    child: Text('WIB (UTC+7)')),
+                      DropdownMenuItem(value: 'WITA',   child: Text('WITA (UTC+8)')),
+                      DropdownMenuItem(value: 'WIT',    child: Text('WIT (UTC+9)')),
                       DropdownMenuItem(value: 'London', child: Text('London (UTC+0/+1)')),
                     ],
-                    onChanged: (value) {
-                      if (value != null) setState(() => _timezone = value);
-                    },
+                    onChanged: (v) { if (v != null) setState(() => _timezone = v); },
                   ),
 
                   const SizedBox(height: 24),
 
-                  // ─── Seksi Data Bayi ───────────────────────────────────
+                  // ════════════════════════════════════════════════════════
+                  // SEKSI DATA BAYI
+                  // ════════════════════════════════════════════════════════
                   const Divider(),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.child_care,
-                          color: Theme.of(context).colorScheme.primary,
-                          size: 20,
-                        ),
+                        Icon(Icons.child_care,
+                            color: Theme.of(context).colorScheme.primary, size: 20),
                         const SizedBox(width: 8),
                         Text(
                           'Data Bayi (MPASI)',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: Theme.of(context).colorScheme.primary,
                               ),
@@ -354,16 +298,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   Text(
                     'Isi data bayi untuk kalkulasi target kalori MPASI yang akurat '
-                    '(metode Holliday-Segar / WHO). Jika dikosongkan, app akan '
-                    'menggunakan data standar WHO sebagai fallback.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.grey[600],
-                        ),
+                    '(Holliday-Segar + WHO/IDAI). Jika dikosongkan, digunakan data statis WHO.',
+                    style: Theme.of(context).textTheme.bodySmall
+                        ?.copyWith(color: Colors.grey[600]),
                   ),
-
                   const SizedBox(height: 16),
 
-                  // Tanggal Lahir Bayi — tap-to-pick
+                  // ── Tanggal Lahir Bayi ───────────────────────────────────
                   GestureDetector(
                     onTap: _selectBabyBirthDate,
                     child: AbsorbPointer(
@@ -375,29 +316,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           prefixIcon: const Icon(Icons.calendar_today),
                           hintText: 'Ketuk untuk memilih tanggal',
                           helperText: _babyBirthDate != null
-                              ? 'Usia bayi saat ini: ${_getBabyAgeLabel()}'
+                              ? 'Usia bayi: ${_babyAgeLabel()}'
                               : 'Opsional — untuk menghitung usia otomatis',
                           suffixIcon: _babyBirthDate != null
                               ? IconButton(
                                   icon: const Icon(Icons.clear, size: 18),
-                                  tooltip: 'Hapus tanggal',
-                                  onPressed: () =>
-                                      setState(() => _babyBirthDate = null),
+                                  onPressed: () => setState(() => _babyBirthDate = null),
                                 )
                               : const Icon(Icons.edit_calendar_outlined),
                         ),
                         controller: TextEditingController(
-                          text: _babyBirthDate != null
-                              ? _formatBabyBirthDate(_babyBirthDate!)
-                              : '',
+                          text: _babyBirthDate != null ? _formatDate(_babyBirthDate!) : '',
                         ),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 16),
 
-                  // Berat Badan Bayi
+                  // ── Berat Badan Bayi ─────────────────────────────────────
                   TextFormField(
                     controller: _babyWeightController,
                     decoration: const InputDecoration(
@@ -407,35 +343,28 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       hintText: 'Contoh: 8.5',
                       helperText: 'Opsional — rentang: 2–30 kg',
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return null;
-                      final w = double.tryParse(value);
-                      if (w == null) {
-                        return 'Masukkan angka yang valid (contoh: 8.5)';
-                      }
-                      if (w < 2 || w > 30) {
-                        return 'Berat bayi harus antara 2–30 kg';
-                      }
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return null;
+                      final w = double.tryParse(v);
+                      if (w == null) return 'Masukkan angka yang valid (contoh: 8.5)';
+                      if (w < 2 || w > 30) return 'Berat bayi harus antara 2–30 kg';
                       return null;
                     },
                   ),
-                  // ──────────────────────────────────────────────────────
+                  // ════════════════════════════════════════════════════════
 
                   const SizedBox(height: 24),
 
-                  // Save Button
+                  // ── Tombol Simpan ────────────────────────────────────────
                   ElevatedButton(
-                    onPressed: authProvider.isLoading ? null : _saveProfile,
+                    onPressed: provider.isLoading ? null : _saveProfile,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    child: authProvider.isLoading
+                    child: provider.isLoading
                         ? const SizedBox(
-                            height: 20,
-                            width: 20,
+                            height: 20, width: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('Simpan Perubahan'),
