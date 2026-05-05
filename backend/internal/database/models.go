@@ -16,12 +16,14 @@ type User struct {
 	Weight          *float64  `gorm:"type:decimal(5,2)" json:"weight"`
 	Height          *float64  `gorm:"type:decimal(5,2)" json:"height"`
 	Age             *int      `gorm:"type:integer" json:"age"`
-	IsBreastfeeding bool      `gorm:"default:false" json:"is_breastfeeding"`
-	ActivityLevel   string    `gorm:"type:varchar(20);default:'sedentary'" json:"activity_level"`
-	ProfileImageURL *string   `gorm:"type:text" json:"profile_image_url"`
-	Timezone        string    `gorm:"type:varchar(10);default:'WIB'" json:"timezone"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	IsBreastfeeding bool       `gorm:"default:false" json:"is_breastfeeding"`
+	ActivityLevel   string     `gorm:"type:varchar(20);default:'sedentary'" json:"activity_level"`
+	ProfileImageURL *string    `gorm:"type:text" json:"profile_image_url"`
+	Timezone        string     `gorm:"type:varchar(10);default:'WIB'" json:"timezone"`
+	BabyBirthDate   *time.Time `gorm:"type:date" json:"baby_birth_date"`
+	BabyWeightKg    *float64   `gorm:"type:decimal(5,2)" json:"baby_weight_kg"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // Food represents a food item in the database

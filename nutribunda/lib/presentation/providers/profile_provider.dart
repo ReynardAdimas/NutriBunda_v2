@@ -80,6 +80,8 @@ class ProfileProvider extends ChangeNotifier {
     bool? isBreastfeeding,
     String? activityLevel,
     String? timezone,
+    DateTime? babyBirthDate,
+    double? babyWeightKg,
   }) async {
     try {
       _isLoading = true;
@@ -121,6 +123,11 @@ class ProfileProvider extends ChangeNotifier {
       }
       if (activityLevel != null) updateData['activity_level'] = activityLevel;
       if (timezone != null) updateData['timezone'] = timezone;
+      if (babyBirthDate != null) {
+        updateData['baby_birth_date'] =
+            babyBirthDate.toIso8601String().substring(0, 10);
+      }
+      if (babyWeightKg != null) updateData['baby_weight_kg'] = babyWeightKg;
 
       // Call update profile API
       final response = await _httpClient.put(

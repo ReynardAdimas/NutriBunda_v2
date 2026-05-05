@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nfnt/resize"
@@ -61,6 +62,8 @@ type UpdateProfileRequest struct {
 	IsBreastfeeding *bool    `json:"is_breastfeeding"`
 	ActivityLevel   *string  `json:"activity_level"`
 	Timezone        *string  `json:"timezone"`
+	BabyBirthDate   *string  `json:"baby_birth_date"`  // format: "YYYY-MM-DD"
+	BabyWeightKg    *float64 `json:"baby_weight_kg"`
 }
 
 // GetProfile retrieves user profile by ID
@@ -147,6 +150,23 @@ func (s *Service) UpdateProfile(userID uuid.UUID, req *UpdateProfileRequest) (*d
 	}
 	if req.Timezone != nil {
 		updates["timezone"] = *req.Timezone
+	}
+	if req.BabyBirthDate != nil {
+		if *req.BabyBirthDate == "" {
+			updates["baby_birth_date"] = nil
+		} else {
+			parsed, err := time.Parse("2006-01-02", *req.BabyBirthDate)
+			if err != nil {
+				return nil, errors.New("invalid baby_birth_date format, use YYYY-MM-DD")
+			}
+			updates["baby_birth_date"] = parsed
+		}
+	}
+	if req.BabyWeightKg != nil {
+		if *req.BabyWeightKg < 2 || *req.BabyWeightKg > 30 {
+			return nil, errors.New("baby weight must be between 2 and 30 kg")
+		}
+		updates["baby_weight_kg"] = *req.BabyWeightKg
 	}
 
 	// Update user
