@@ -42,6 +42,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     // Load data for both profiles
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // FIX #1: Pastikan ProfileProvider punya data user saat dashboard pertama
+      // dibuka, termasuk setelah login langsung tanpa buka ProfileScreen.
+      // ProfileProvider.setUser() sudah ada dan cukup untuk ini.
+      final profileProvider = context.read<ProfileProvider>();
+      if (profileProvider.user == null) {
+        final authUser = context.read<AuthProvider>().user;
+        if (authUser != null) {
+          profileProvider.setUser(authUser);
+        }
+      }
       _loadData();
       _initializeDietPlan();
     });
@@ -55,9 +65,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Refresh ketika kembali ke halaman ini (misalnya setelah tambah diary)
-    // Hanya refresh jika sudah ada data sebelumnya (bukan load pertama)
+    // Refresh ketika kembali ke halaman ini (misalnya setelah tambah diary
+    // atau setelah edit profil).
+    // Hanya refresh jika sudah ada data sebelumnya (bukan load pertama).
     if (_babySummary != null || _motherSummary != null) {
+      // FIX #2: Re-sync ProfileProvider dari AuthProvider setiap kembali ke
+      // dashboard. Menangani kasus di mana ProfileProvider.user masih null.
+      final profileProvider = context.read<ProfileProvider>();
+      if (profileProvider.user == null) {
+        final authUser = context.read<AuthProvider>().user;
+        if (authUser != null) {
+          profileProvider.setUser(authUser);
+        }
+      }
       _loadData();
     }
   }

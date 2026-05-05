@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../providers/profile_provider.dart';
+import '../../providers/auth_provider.dart';
 
 /// Edit Profile Screen
 /// Requirements: 12.1, 12.2, 12.3, 12.4, 12.5
@@ -39,8 +40,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   void _loadUserData() {
-    // ProfileProvider adalah sumber kebenaran tunggal untuk halaman profil
-    final user = context.read<ProfileProvider>().user;
+    // Gunakan ProfileProvider sebagai sumber utama.
+    // FIX #5: Jika ProfileProvider.user belum terisi (user langsung buka
+    // EditProfile tanpa lewat ProfileScreen), fallback ke AuthProvider.user
+    // agar field babyBirthDate & babyWeightKg tidak kosong.
+    final user = context.read<ProfileProvider>().user
+        ?? context.read<AuthProvider>().user;
     if (user != null) {
       _nameController.text        = user.fullName;
       _weightController.text      = user.weight?.toString() ?? '';
@@ -121,6 +126,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (success) {
       // Re-fetch agar ProfileProvider punya data terbaru dari server
       await provider.fetchProfile();
+
+      if (!mounted) return;
+
+      // FIX #3: Sync data terbaru (termasuk babyBirthDate & babyWeightKg)
+      // ke AuthProvider agar dashboard yang membaca authUser juga up-to-date.
+      // AuthProvider.updateUser() memperbarui _user internalnya tanpa API call.
+      if (provider.user != null) {
+        context.read<AuthProvider>().updateUser(provider.user!);
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

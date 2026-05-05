@@ -555,6 +555,17 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Perbarui data user di-memory (tanpa API call).
+  ///
+  /// Digunakan oleh [EditProfileScreen] setelah update profil berhasil,
+  /// agar [AuthProvider._user] sinkron dengan data terbaru dari
+  /// [ProfileProvider] — termasuk field [babyBirthDate] dan [babyWeightKg]
+  /// yang dibutuhkan oleh [BabyNutritionService] di dashboard.
+  void updateUser(UserModel updatedUser) {
+    _user = updatedUser;
+    notifyListeners();
+  }
+
   // ==================== Validation Helpers ====================
 
   /// Validasi format email

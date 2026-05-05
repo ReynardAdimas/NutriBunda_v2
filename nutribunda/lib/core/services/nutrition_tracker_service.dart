@@ -84,7 +84,24 @@ class NutritionTrackerService {
         ageInMonths: babyAgeInMonths,
         babyWeightKg: babyWeightKg,
       );
-      targets = dynamic ?? Map.from(babyTargets);
+
+      if (dynamic != null) {
+        // Kalkulasi dinamis berhasil (usia dalam range 6–23 bln)
+        targets = dynamic;
+      } else {
+        // FIX #4: Jika usia tidak tersedia atau di luar range, gunakan data
+        // statis WHO dari BabyNutritionService (bukan babyTargets hardcode
+        // 1000 kkal). Default ke kelompok usia 6–8 bulan sebagai fallback
+        // paling konservatif.
+        final fallbackAge = (babyAgeInMonths != null && babyAgeInMonths >= 6)
+            ? babyAgeInMonths
+            : 6; // default: kelompok 6–8 bulan
+        targets = BabyNutritionService.getTargets(
+              ageInMonths: fallbackAge.clamp(6, 23),
+              babyWeightKg: null, // paksa static fallback WHO
+            ) ??
+            Map.from(babyTargets); // last-resort: nilai hardcode lama
+      }
     } else {
       // Profil ibu — mulai dari data statis, lalu terapkan override kalori
       targets = Map<String, double>.from(motherTargets);
