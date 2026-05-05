@@ -1,44 +1,53 @@
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:nutribunda/data/datasources/local/local_steps_datasource.dart';
 import 'base_provider.dart';
 import '../../data/models/user_model.dart';
 import '../../core/services/pedometer_service.dart';
 
 /// Provider untuk mengelola Diet Plan dengan kalkulasi BMR/TDEE
+/// Pedometer mode: always-on (otomatis menyala, tidak ada start/stop manual)
+/// Notifikasi milestone langkah diurus di sini menggunakan flutter_local_notifications
+/// yang sudah di-init oleh NotificationService di main app.
 /// Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7
 class DietPlanProvider extends BaseProvider {
   // BMR, TDEE, dan Target Calories
   double? _bmr;
   double? _tdee;
   double? _targetCalories;
-  
+
   // Step tracking
   int _steps = 0;
   double _caloriesBurned = 0;
-  
+
   // User data untuk kalkulasi
   UserModel? _user;
 
   final LocalStepsDatasource _localStepsDatasource;
-  int? _currentUserId; 
+  int? _currentUserId;
 
-  DietPlanProvider(this._localStepsDatasource, );
+  DietPlanProvider(this._localStepsDatasource);
 
   DateTime? _lastTrackedDate;
-  
-  // Pedometer service
+
+  // Pedometer service — always-on
   final PedometerService _pedometerService = PedometerService();
-  
+
+  // Notifikasi plugin — menggunakan instance yang sudah ada di app
+  // (tidak perlu init ulang, NotificationService sudah menginisialisasinya)
+  static final FlutterLocalNotificationsPlugin _notificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  static const String _stepChannelId = 'pedometer_milestones';
+  static const int _stepNotificationId = 9001;
+
   // Activity level factors
   static const Map<String, double> _activityFactors = {
     'sedentary': 1.2,
     'lightly_active': 1.375,
     'moderately_active': 1.55,
   };
-  
-  // Breastfeeding calorie addition (using average)
+
   static const double _breastfeedingCaloriesAvg = 400;
-  
-  // Safe calorie deficit
   static const double _maxCalorieDeficit = 500;
 
   // Getters
@@ -49,54 +58,44 @@ class DietPlanProvider extends BaseProvider {
   double get caloriesBurned => _caloriesBurned;
   UserModel? get user => _user;
   PedometerService get pedometerService => _pedometerService;
-  
-  /// Check if pedometer is currently active
+
+  /// Pedometer selalu aktif — tidak ada state berhenti selain saat error
   bool get isPedometerActive => _pedometerService.isListening;
-  
+
   /// Get pedometer error message if any
   String? get pedometerError => _pedometerService.errorMessage;
-  
-  /// Check if diet plan can be calculated
-  /// Requirements: 5.11 - Validasi data profil sebelum kalkulasi
+
   bool get canCalculateDietPlan {
     return _user != null &&
         _user!.weight != null &&
         _user!.height != null &&
         _user!.age != null;
   }
-  
+
   void setCurrentUserId(int userId) {
     _currentUserId = userId;
   }
 
-  /// Get missing profile data fields
   List<String> get missingProfileData {
     final missing = <String>[];
-    if (_user == null) {
-      return ['User data not loaded'];
-    }
+    if (_user == null) return ['User data not loaded'];
     if (_user!.weight == null) missing.add('Berat badan');
     if (_user!.height == null) missing.add('Tinggi badan');
     if (_user!.age == null) missing.add('Usia');
     return missing;
   }
 
-  /// Set user data and automatically recalculate
-  /// Requirements: 5.5 - Recalculate saat user data berubah
   void setUser(UserModel user) {
     final oldUser = _user;
     _user = user;
-    
-    // Automatically recalculate if data is complete
+
     if (canCalculateDietPlan) {
       calculateAll();
     } else {
-      // Clear calculations if data is incomplete
       _bmr = null;
       _tdee = null;
       _targetCalories = null;
-      
-      // Only notify if user actually changed
+
       if (oldUser != user) {
         safeNotifyListeners();
       }
@@ -104,11 +103,11 @@ class DietPlanProvider extends BaseProvider {
   }
 
   /// Calculate BMR using Mifflin-St Jeor formula for women
-  /// Requirements: 5.1 - BMR = (10 × weight_kg) + (6.25 × height_cm) − (5 × age_years) − 161
+  /// Requirements: 5.1
   void calculateBMR() {
-    if (_user == null || 
-        _user!.weight == null || 
-        _user!.height == null || 
+    if (_user == null ||
+        _user!.weight == null ||
+        _user!.height == null ||
         _user!.age == null) {
       _bmr = null;
       safeNotifyListeners();
@@ -119,14 +118,12 @@ class DietPlanProvider extends BaseProvider {
     final height = _user!.height!;
     final age = _user!.age!;
 
-    // Mifflin-St Jeor formula for women
     _bmr = (10 * weight) + (6.25 * height) - (5 * age) - 161;
-    
     safeNotifyListeners();
   }
 
-  /// Calculate TDEE by multiplying BMR with activity factor
-  /// Requirements: 5.2 - TDEE = BMR × activity_factor
+  /// Calculate TDEE
+  /// Requirements: 5.2
   void calculateTDEE() {
     if (_bmr == null || _user == null) {
       _tdee = null;
@@ -135,16 +132,15 @@ class DietPlanProvider extends BaseProvider {
     }
 
     final activityLevel = _user!.activityLevel;
-    final activityFactor = _activityFactors[activityLevel] ?? _activityFactors['sedentary']!;
+    final activityFactor =
+        _activityFactors[activityLevel] ?? _activityFactors['sedentary']!;
 
     _tdee = _bmr! * activityFactor;
-    
     safeNotifyListeners();
   }
 
-  /// Calculate target calories with safe deficit and breastfeeding adjustment
-  /// Requirements: 5.3 - Target kalori dengan defisit aman maksimal 500 kkal
-  /// Requirements: 5.4 - Tambahkan 300-500 kkal saat menyusui
+  /// Calculate target calories
+  /// Requirements: 5.3, 5.4
   void calculateTargetCalories() {
     if (_tdee == null || _user == null) {
       _targetCalories = null;
@@ -152,37 +148,27 @@ class DietPlanProvider extends BaseProvider {
       return;
     }
 
-    // Start with TDEE minus safe deficit
-    // Requirements: 5.3 - Defisit maksimal 500 kkal
     double target = _tdee! - _maxCalorieDeficit;
 
-    // Add breastfeeding calories if applicable
-    // Requirements: 5.4 - Tambahkan 300-500 kkal saat menyusui
     if (_user!.isBreastfeeding) {
       target += _breastfeedingCaloriesAvg;
     }
 
-    // Ensure target is not below a safe minimum (80% of BMR)
     final minimumSafe = _bmr! * 0.8;
     if (target < minimumSafe) {
       target = minimumSafe;
     }
 
     _targetCalories = target;
-    
     safeNotifyListeners();
   }
 
-  /// Calculate all values (BMR, TDEE, Target Calories)
-  /// Requirements: 5.5 - Recalculate semua saat data berubah
   void calculateAll() {
     calculateBMR();
     calculateTDEE();
     calculateTargetCalories();
   }
 
-  /// Update user profile data and recalculate
-  /// Requirements: 5.5 - Automatic recalculation saat profil diupdate
   void updateUserProfile({
     double? weight,
     double? height,
@@ -200,87 +186,138 @@ class DietPlanProvider extends BaseProvider {
       isBreastfeeding: isBreastfeeding ?? _user!.isBreastfeeding,
     );
 
-    // Automatically recalculate
     calculateAll();
   }
-  
-  void _checkAndResetForNewDay() {
-    final today = DateTime.now(); 
-    final todayDate = DateTime(today.year, today.month, today.day); 
 
-    if(_lastTrackedDate != null && _lastTrackedDate!.isBefore(todayDate)) {
+  /// Cek apakah hari sudah berganti saat app di-launch, jika iya reset steps
+  void _checkAndResetForNewDay() {
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+
+    if (_lastTrackedDate != null && _lastTrackedDate!.isBefore(todayDate)) {
       resetDailySteps();
     }
     _lastTrackedDate = todayDate;
   }
-  
-  /// Update steps and calculate calories burned
-  /// Requirements: 5.6, 5.7 - Menghitung kalori terbakar dari langkah
+
+  /// Update steps dan hitung kalori
+  /// Requirements: 5.6, 5.7
   void updateSteps(int steps) {
     _checkAndResetForNewDay();
     _steps = steps;
-    
+
     if (_user == null || _user!.weight == null) {
       _caloriesBurned = 0;
       safeNotifyListeners();
       return;
     }
-    
-    // Formula: 1 langkah ≈ 0.04 kkal per kg berat badan
-    // Requirements: 5.7 - Formula kalori terbakar
+
     final weight = _user!.weight!;
+    // Formula: 1 langkah ≈ 0.04 kkal per kg berat badan
+    // Requirements: 5.7
     _caloriesBurned = steps * 0.04 * weight / 1000;
-    
+
     safeNotifyListeners();
 
+    // Simpan ke DB setiap 10 langkah
     if (steps % 10 == 0 || steps == 0) {
       _saveTodayStepsLocally();
     }
   }
 
-  Future<void> _saveTodayStepsLocally() async {
-    if(_currentUserId == null) return; 
+  /// Kirim notifikasi milestone langkah
+  /// Dipanggil dari callback onMilestoneReached di _startPedometerTracking
+  Future<void> _sendMilestoneNotification(int milestone) async {
+    String title;
+    String body;
 
-    final today = DateTime.now(); 
-    final dateStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    if (milestone >= 10000) {
+      title = '🏆 $milestone Langkah!';
+      body = 'Luar biasa! Kamu sudah mencapai target harian 10.000 langkah!';
+    } else if (milestone >= 5000) {
+      title = '🔥 $milestone Langkah!';
+      body = 'Keren! Sudah separuh jalan menuju 10.000 langkah!';
+    } else if (milestone >= 1000) {
+      title = '💪 $milestone Langkah!';
+      body = 'Tetap semangat! Kamu sudah melewati $milestone langkah hari ini.';
+    } else {
+      title = '👟 $milestone Langkah!';
+      body = 'Bagus! Kamu sudah berjalan $milestone langkah hari ini.';
+    }
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      _stepChannelId,
+      'Pencapaian Langkah',
+      channelDescription: 'Notifikasi saat kamu mencapai kelipatan 100 langkah',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentSound: true,
+    );
+
+    const NotificationDetails details = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+
+    await _notificationsPlugin.show(
+      id: _stepNotificationId,
+      title:title,
+      body:body,
+      notificationDetails: details
+    );
+  }
+
+  Future<void> _saveTodayStepsLocally() async {
+    if (_currentUserId == null) return;
+
+    final today = DateTime.now();
+    final dateStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
     try {
       await _localStepsDatasource.saveOrUpdateDailySteps(
-        userId: _currentUserId!, 
-        date: dateStr, 
-        steps: _steps, 
-        caloriesBurned: _caloriesBurned
+        userId: _currentUserId!,
+        date: dateStr,
+        steps: _steps,
+        caloriesBurned: _caloriesBurned,
       );
     } catch (e) {
       throw Exception();
     }
   }
 
-  /// PERUBAHAN LANGKAH 2: Modifikasi loadTodaySteps()
+  /// Load data langkah hari ini dari lokal DB, lalu langsung jalankan pedometer.
+  /// Ini adalah satu-satunya entry point untuk memulai pedometer — otomatis dipanggil
+  /// saat screen diet plan dibuka atau saat app pertama kali launch.
   Future<void> loadTodaySteps() async {
-    if(_currentUserId == null) return; 
+    if (_currentUserId == null) return;
 
     final today = DateTime.now();
-    final dateStr = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    final dateStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
 
     try {
       final data = await _localStepsDatasource.getDailySteps(
-        userId: _currentUserId!, 
-        date: dateStr
+        userId: _currentUserId!,
+        date: dateStr,
       );
 
-      if(data != null) {
-        _steps = data['steps'] as int; 
-        _caloriesBurned = (data['calories_burned'] as num).toDouble(); 
+      if (data != null) {
+        _steps = data['steps'] as int;
+        _caloriesBurned = (data['calories_burned'] as num).toDouble();
         safeNotifyListeners();
       }
-      
-      // KUNCI: Langsung jalankan pedometer dengan inject data SQLite setelah data berhasil diload.
-      // Ini akan mencegah sensor me-reset data yang baru saja dibaca ke 0.
-      startPedometerTracking();
 
+      // Selalu jalankan pedometer setelah load — inject data dari DB sebagai baseline
+      _startPedometerTracking();
     } catch (e) {
-      // Jika error membaca DB, tetap jalankan sensor dari 0
-      startPedometerTracking();
+      // Jika DB error, tetap jalankan sensor dari 0
+      _startPedometerTracking();
       print('DietPlanProvider: Error loading steps - $e');
     }
   }
@@ -288,27 +325,22 @@ class DietPlanProvider extends BaseProvider {
   Future<void> forceSaveSteps() async {
     await _saveTodayStepsLocally();
   }
-  
-  /// Start pedometer tracking
-  /// PERUBAHAN LANGKAH 2: Masukkan parameter savedDailySteps
-  /// Requirements: 5.6 - Menghitung langkah kaki secara real-time
-  void startPedometerTracking() {
-    if (_pedometerService.isListening) {
-      return;
-    }
-    
-    // Inject _steps yang ada saat ini (baik 0 maupun data dari DB) ke PedometerService
-    _pedometerService.startListening((steps) {
-      updateSteps(steps);
-    }, savedDailySteps: _steps);
-  }
-  
-  /// Stop pedometer tracking
-  void stopPedometerTracking() {
-    _pedometerService.stopListening();
+
+  /// Jalankan pedometer — internal, tidak diekspos ke UI.
+  /// UI tidak bisa start/stop pedometer secara manual.
+  /// Requirements: 5.6
+  void _startPedometerTracking() {
+    if (_pedometerService.isListening) return;
+
+    _pedometerService.startListening(
+      (steps) => updateSteps(steps),
+      savedDailySteps: _steps,
+      onMilestoneReached: (milestone) => _sendMilestoneNotification(milestone),
+    );
   }
 
-  /// Reset daily steps (should be called at midnight)
+  /// Reset langkah harian — dipanggil otomatis oleh PedometerService saat tengah malam,
+  /// atau oleh [_checkAndResetForNewDay] saat app di-launch di hari baru.
   void resetDailySteps() {
     _steps = 0;
     _caloriesBurned = 0;
@@ -316,61 +348,38 @@ class DietPlanProvider extends BaseProvider {
     safeNotifyListeners();
   }
 
-  /// Get remaining calories (target - consumed + burned)
-  /// Requirements: 5.8 - Menampilkan sisa kalori
   double getRemainingCalories(double consumedCalories) {
     if (_targetCalories == null) return 0;
-    
     return _targetCalories! - consumedCalories + _caloriesBurned;
   }
 
-  /// Get calorie progress percentage
-  /// Requirements: 5.9 - Progress bar kalori
   double getCalorieProgress(double consumedCalories) {
     if (_targetCalories == null || _targetCalories == 0) return 0;
-    
     final netCalories = consumedCalories - _caloriesBurned;
     final progress = (netCalories / _targetCalories!) * 100;
-    
-    // Cap at 150% for display purposes
     return progress.clamp(0, 150);
   }
 
-  /// Get progress color based on percentage
-  /// Requirements: 5.9 - Color coding: hijau (0-80%), kuning (81-100%), merah (>100%)
   String getProgressColor(double consumedCalories) {
     final progress = getCalorieProgress(consumedCalories);
-    
-    if (progress <= 80) {
-      return 'green';
-    } else if (progress <= 100) {
-      return 'yellow';
-    } else {
-      return 'red';
-    }
+    if (progress <= 80) return 'green';
+    if (progress <= 100) return 'yellow';
+    return 'red';
   }
 
-  /// Check if calories exceeded target
-  /// Requirements: 5.10 - Peringatan jika melebihi target
   bool isCaloriesExceeded(double consumedCalories) {
     if (_targetCalories == null) return false;
-    
     final netCalories = consumedCalories - _caloriesBurned;
     return netCalories > _targetCalories!;
   }
 
-  /// Get calorie excess amount
-  /// Requirements: 5.10 - Menampilkan selisih kalori yang melebihi
   double getCalorieExcess(double consumedCalories) {
     if (_targetCalories == null) return 0;
-    
     final netCalories = consumedCalories - _caloriesBurned;
     final excess = netCalories - _targetCalories!;
-    
     return excess > 0 ? excess : 0;
   }
 
-  /// Get diet plan summary
   Map<String, dynamic> getDietPlanSummary(double consumedCalories) {
     return {
       'bmr': _bmr,
@@ -400,7 +409,7 @@ class DietPlanProvider extends BaseProvider {
     _pedometerService.dispose();
     super.resetState();
   }
-  
+
   @override
   void dispose() {
     _pedometerService.dispose();

@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/diet_plan_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 
-/// Pedometer Controls Widget
-/// Requirements: 5.6, 5.7, 5.8 - UI controls untuk pedometer tracking
+/// Pedometer Widget — Smartwatch Style
+///
+/// Tidak ada tombol mulai/berhenti/reset.
+/// Pedometer berjalan terus-menerus secara otomatis.
+/// Notifikasi dikirim setiap kelipatan 100 langkah.
+/// Reset otomatis terjadi setiap tengah malam.
+///
+/// Requirements: 5.6, 5.7, 5.8
 class PedometerControls extends StatelessWidget {
   const PedometerControls({super.key});
 
@@ -12,10 +17,11 @@ class PedometerControls extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<DietPlanProvider>(
       builder: (context, provider, child) {
-        final isActive = provider.isPedometerActive;
         final hasError = provider.pedometerError != null;
         final steps = provider.steps;
         final caloriesBurned = provider.caloriesBurned;
+        final pedestrianStatus =
+            provider.pedometerService.pedestrianStatus;
 
         return Card(
           elevation: 2,
@@ -27,7 +33,7 @@ class PedometerControls extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header with status indicator
+                // Header
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -48,23 +54,27 @@ class PedometerControls extends StatelessWidget {
                         ),
                       ],
                     ),
-                    _buildStatusIndicator(context, isActive, hasError),
+                    _buildStatusBadge(
+                        context, pedestrianStatus, hasError),
                   ],
                 ),
+
                 const SizedBox(height: 16),
 
-                // Error message if any
+                // Error message (jika ada)
                 if (hasError) ...[
                   _buildErrorMessage(context, provider.pedometerError!),
                   const SizedBox(height: 16),
                 ],
 
-                // Step count display with animation
-                _buildStepDisplay(context, steps, caloriesBurned, isActive),
-                const SizedBox(height: 16),
+                // Step display utama
+                _buildStepDisplay(
+                    context, steps, caloriesBurned, pedestrianStatus),
 
-                // Control buttons
-                _buildControlButtons(context, provider, isActive),
+                const SizedBox(height: 12),
+
+                // Info reset harian
+                _buildDailyResetInfo(context),
               ],
             ),
           ),
@@ -73,53 +83,59 @@ class PedometerControls extends StatelessWidget {
     );
   }
 
-  /// Status indicator showing active/stopped state
-  /// Requirements: 5.8 - Menampilkan status tracking
-  Widget _buildStatusIndicator(
+  /// Badge status berjalan/berhenti/error — seperti indikator smartwatch
+  Widget _buildStatusBadge(
     BuildContext context,
-    bool isActive,
+    String pedestrianStatus,
     bool hasError,
   ) {
-    Color statusColor;
-    String statusText;
-    IconData statusIcon;
+    Color color;
+    String label;
+    IconData icon;
 
     if (hasError) {
-      statusColor = Colors.red;
-      statusText = 'Error';
-      statusIcon = Icons.error_outline;
-    } else if (isActive) {
-      statusColor = Colors.green;
-      statusText = 'Aktif';
-      statusIcon = Icons.check_circle;
+      color = Colors.red;
+      label = 'Error';
+      icon = Icons.error_outline;
+    } else if (pedestrianStatus == 'walking') {
+      color = Colors.green;
+      label = 'Berjalan';
+      icon = Icons.directions_walk;
+    } else if (pedestrianStatus == 'stopped') {
+      color = Colors.blueGrey;
+      label = 'Istirahat';
+      icon = Icons.pause_circle_outline;
     } else {
-      statusColor = Colors.grey;
-      statusText = 'Berhenti';
-      statusIcon = Icons.pause_circle_outline;
+      // 'unknown' — sensor aktif tapi belum ada data gerak
+      color = Colors.teal;
+      label = 'Aktif';
+      icon = Icons.sensors;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: statusColor.withValues(alpha: 0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            statusIcon,
-            size: 16,
-            color: statusColor,
-          ),
-          const SizedBox(width: 6),
+          // Dot animasi kecil saat berjalan
+          if (pedestrianStatus == 'walking' && !hasError)
+            Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: _PulsingDot(color: color),
+            ),
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
           Text(
-            statusText,
+            label,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: statusColor,
+              color: color,
             ),
           ),
         ],
@@ -127,8 +143,6 @@ class PedometerControls extends StatelessWidget {
     );
   }
 
-  /// Error message display
-  /// Requirements: 5.8 - Error handling dan user feedback
   Widget _buildErrorMessage(BuildContext context, String errorMessage) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -139,11 +153,8 @@ class PedometerControls extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            color: Colors.red[700],
-            size: 20,
-          ),
+          Icon(Icons.warning_amber_rounded,
+              color: Colors.red[700], size: 20),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -173,46 +184,60 @@ class PedometerControls extends StatelessWidget {
     );
   }
 
-  /// Step count display with real-time visual indicator
-  /// Requirements: 5.8 - Visual indicator untuk real-time step updates
+  /// Tampilan langkah utama — desain smartwatch-style
   Widget _buildStepDisplay(
     BuildContext context,
     int steps,
     double caloriesBurned,
-    bool isActive,
+    String pedestrianStatus,
   ) {
+    final isWalking = pedestrianStatus == 'walking';
+    final nextMilestone = ((steps ~/ 100) + 1) * 100;
+    final progressToNext =
+        steps == 0 ? 0.0 : ((steps % 100) / 100.0).clamp(0.0, 1.0);
+
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-            Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
+            Theme.of(context)
+                .colorScheme
+                .primary
+                .withValues(alpha: 0.12),
+            Theme.of(context)
+                .colorScheme
+                .primary
+                .withValues(alpha: 0.04),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+          color: Theme.of(context)
+              .colorScheme
+              .primary
+              .withValues(alpha: 0.2),
         ),
       ),
       child: Column(
         children: [
-          // Steps count with pulsing animation when active
+          // Angka langkah
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (isActive)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8, bottom: 12),
-                  child: _PulsingDot(),
+              if (isWalking)
+                const Padding(
+                  padding: EdgeInsets.only(right: 8, bottom: 12),
+                  child: _PulsingDot(color: Colors.green),
                 ),
               Text(
                 steps.toString(),
                 style: TextStyle(
-                  fontSize: 48,
+                  fontSize: 52,
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).colorScheme.primary,
                 ),
@@ -229,11 +254,55 @@ class PedometerControls extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
 
-          // Calories burned
+          const SizedBox(height: 8),
+
+          // Progress bar ke milestone berikutnya
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Menuju $nextMilestone langkah',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                  Text(
+                    '${(progressToNext * 100).toStringAsFixed(0)}%',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color:
+                          Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progressToNext,
+                  minHeight: 6,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Kalori terbakar
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
@@ -241,11 +310,8 @@ class PedometerControls extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.whatshot,
-                  size: 18,
-                  color: Colors.orange[700],
-                ),
+                Icon(Icons.whatshot,
+                    size: 18, color: Colors.orange[700]),
                 const SizedBox(width: 6),
                 Text(
                   '${caloriesBurned.toStringAsFixed(1)} kkal terbakar',
@@ -263,268 +329,31 @@ class PedometerControls extends StatelessWidget {
     );
   }
 
-  /// Control buttons for start/stop/reset
-  /// Requirements: 5.8 - Start/stop/reset controls
-  Widget _buildControlButtons(
-    BuildContext context,
-    DietPlanProvider provider,
-    bool isActive,
-  ) {
+  /// Info kecil bahwa pedometer reset otomatis tiap malam
+  Widget _buildDailyResetInfo(BuildContext context) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Start/Stop button
-        Expanded(
-          flex: 2,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              if (isActive) {
-                provider.stopPedometerTracking();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Pedometer dihentikan'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              } else {
-                _startPedometerWithPermissionCheck(context, provider);
-              }
-            },
-            icon: Icon(
-              isActive ? Icons.pause : Icons.play_arrow,
-              size: 20,
-            ),
-            label: Text(
-              isActive ? 'Berhenti' : 'Mulai',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isActive
-                  ? Colors.orange
-                  : Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-
-        // Reset button
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () {
-              _showResetConfirmation(context, provider);
-            },
-            icon: const Icon(Icons.refresh, size: 20),
-            label: const Text(
-              'Reset',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.grey[700],
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              side: BorderSide(color: Colors.grey[400]!),
-            ),
+        Icon(Icons.info_outline, size: 13, color: Colors.grey[400]),
+        const SizedBox(width: 4),
+        Text(
+          'Langkah direset otomatis setiap tengah malam',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey[400],
           ),
         ),
       ],
     );
   }
-
-  /// Start pedometer with permission check
-  /// Requirements: 5.8 - Permission handling UI untuk sensor akses
-  void _startPedometerWithPermissionCheck(
-  BuildContext context,
-  DietPlanProvider provider,
-) async {
-  final status = await Permission.activityRecognition.request();
-
-  if (!context.mounted) return;
-
-  if (status.isGranted) {
-    provider.startPedometerTracking();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Pedometer dimulai')),
-    );
-  } else {
-    _showPermissionDialog(context, 'Izin sensor aktivitas diperlukan untuk menghitung langkah kaki.');
-  }
 }
 
-  /// Show permission dialog when sensor access is denied
-  /// Requirements: 5.8 - Permission handling UI
-  void _showPermissionDialog(BuildContext context, String errorMessage) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.sensors_off, color: Colors.orange),
-            SizedBox(width: 12),
-            Text('Izin Sensor Diperlukan'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              errorMessage,
-              style: const TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Untuk menggunakan pedometer:',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blue[900],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildPermissionStep('1', 'Buka Pengaturan perangkat'),
-                  _buildPermissionStep('2', 'Pilih Aplikasi > NutriBunda'),
-                  _buildPermissionStep('3', 'Aktifkan izin Sensor Aktivitas'),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Tutup'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              // In a real app, you would open app settings here
-              // using a package like app_settings
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Silakan aktifkan izin sensor di pengaturan'),
-                  duration: Duration(seconds: 3),
-                ),
-              );
-            },
-            icon: const Icon(Icons.settings),
-            label: const Text('Buka Pengaturan'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPermissionStep(String number, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 20,
-            height: 20,
-            decoration: BoxDecoration(
-              color: Colors.blue[700],
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                number,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.blue[800],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Show reset confirmation dialog
-  void _showResetConfirmation(
-    BuildContext context,
-    DietPlanProvider provider,
-  ) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text('Reset Pedometer?'),
-        content: const Text(
-          'Apakah Anda yakin ingin mereset hitungan langkah hari ini? '
-          'Tindakan ini tidak dapat dibatalkan.',
-          style: TextStyle(fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              provider.resetDailySteps();
-              Navigator.of(dialogContext).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Pedometer telah direset'),
-                  backgroundColor: Colors.green,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Reset'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Pulsing dot animation for real-time indicator
-/// Requirements: 5.8 - Visual indicator untuk real-time updates
+/// Pulsing dot animation
 class _PulsingDot extends StatefulWidget {
+  final Color color;
+
+  const _PulsingDot({this.color = Colors.green});
+
   @override
   State<_PulsingDot> createState() => _PulsingDotState();
 }
@@ -542,7 +371,7 @@ class _PulsingDotState extends State<_PulsingDot>
       vsync: this,
     )..repeat(reverse: true);
 
-    _animation = Tween<double>(begin: 0.5, end: 1.0).animate(
+    _animation = Tween<double>(begin: 0.4, end: 1.0).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
   }
@@ -559,15 +388,16 @@ class _PulsingDotState extends State<_PulsingDot>
       animation: _animation,
       builder: (context, child) {
         return Container(
-          width: 12,
-          height: 12,
+          width: 10,
+          height: 10,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.green.withValues(alpha: _animation.value),
+            color: widget.color.withValues(alpha: _animation.value),
             boxShadow: [
               BoxShadow(
-                color: Colors.green.withValues(alpha: _animation.value * 0.5),
-                blurRadius: 8,
+                color: widget.color
+                    .withValues(alpha: _animation.value * 0.5),
+                blurRadius: 6,
                 spreadRadius: 2,
               ),
             ],

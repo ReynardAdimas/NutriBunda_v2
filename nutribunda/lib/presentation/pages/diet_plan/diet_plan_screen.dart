@@ -65,10 +65,9 @@ class _DietPlanScreenState extends State<DietPlanScreen>
     await foodDiaryProvider.loadEntries();
 
     // Requirements: 5.6, 5.8 - Auto-start pedometer tracking saat screen dibuka
+    // loadTodaySteps() sudah otomatis memulai sensor setelah load data dari DB
     if (dietPlanProvider.canCalculateDietPlan) {
-      // Langkah 10: Load data steps yang tersimpan di SQLite sebelum mulai tracking
       await dietPlanProvider.loadTodaySteps();
-      dietPlanProvider.startPedometerTracking();
     }
   }
 
@@ -76,11 +75,9 @@ class _DietPlanScreenState extends State<DietPlanScreen>
   void dispose() {
     // Hapus observer lifecycle agar tidak terjadi memory leak
     WidgetsBinding.instance.removeObserver(this);
-
-    // Stop pedometer saat meninggalkan screen
-    final dietPlanProvider = context.read<DietPlanProvider>();
-    dietPlanProvider.stopPedometerTracking();
-
+    // Pedometer berjalan terus (always-on) — tidak di-stop saat screen di-dispose.
+    // PedometerService hanya berhenti saat DietPlanProvider.dispose() dipanggil
+    // ketika app benar-benar ditutup.
     super.dispose();
   }
 

@@ -76,7 +76,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     
     // Auto-start pedometer tracking if profile data is complete
     if (dietPlanProvider.canCalculateDietPlan) {
-      dietPlanProvider.startPedometerTracking();
+      dietPlanProvider.loadTodaySteps();
     }
   }
 
