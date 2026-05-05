@@ -16,6 +16,15 @@ class UserModel extends Equatable {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  // --- Data bayi ---
+  /// Tanggal lahir bayi. Digunakan untuk menghitung usia dalam bulan secara
+  /// dinamis sehingga target MPASI selalu up-to-date tanpa input manual.
+  final DateTime? babyBirthDate;
+
+  /// Berat badan bayi terakhir (kg). Digunakan oleh [BabyNutritionService]
+  /// untuk kalkulasi Holliday-Segar. Jika null, fallback ke data statis WHO.
+  final double? babyWeightKg;
+
   const UserModel({
     required this.id,
     required this.email,
@@ -29,6 +38,8 @@ class UserModel extends Equatable {
     this.timezone = 'WIB',
     required this.createdAt,
     required this.updatedAt,
+    this.babyBirthDate,
+    this.babyWeightKg,
   });
 
   /// Create UserModel from JSON
@@ -46,6 +57,12 @@ class UserModel extends Equatable {
       timezone: json['timezone'] as String? ?? 'WIB',
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      babyBirthDate: json['baby_birth_date'] != null
+          ? DateTime.tryParse(json['baby_birth_date'] as String)
+          : null,
+      babyWeightKg: json['baby_weight_kg'] != null
+          ? (json['baby_weight_kg'] as num).toDouble()
+          : null,
     );
   }
 
@@ -64,6 +81,9 @@ class UserModel extends Equatable {
       'timezone': timezone,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      if (babyBirthDate != null)
+        'baby_birth_date': babyBirthDate!.toIso8601String().substring(0, 10),
+      if (babyWeightKg != null) 'baby_weight_kg': babyWeightKg,
     };
   }
 
@@ -81,6 +101,8 @@ class UserModel extends Equatable {
     String? timezone,
     DateTime? createdAt,
     DateTime? updatedAt,
+    DateTime? babyBirthDate,
+    double? babyWeightKg,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -95,6 +117,8 @@ class UserModel extends Equatable {
       timezone: timezone ?? this.timezone,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      babyBirthDate: babyBirthDate ?? this.babyBirthDate,
+      babyWeightKg: babyWeightKg ?? this.babyWeightKg,
     );
   }
 
@@ -112,5 +136,7 @@ class UserModel extends Equatable {
         timezone,
         createdAt,
         updatedAt,
+        babyBirthDate,
+        babyWeightKg,
       ];
 }

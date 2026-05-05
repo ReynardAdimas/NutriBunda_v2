@@ -17,6 +17,7 @@ import '../quiz_screen.dart';
 import '../settings/notification_settings_page.dart';
 import 'notification_center_screen.dart';
 import '../../../core/services/nutrition_tracker_service.dart';
+import '../../../core/services/baby_nutrition_service.dart';
 import '../../../data/models/nutrition_summary.dart';
 
 /// Dashboard screen dengan nutrition summary untuk baby dan mother
@@ -238,17 +239,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               // Baby nutrition summary
               if (_babySummary != null)
-                _buildProfileSection(
-                  context,
-                  'baby',
-                  'Nutrisi Bayi',
-                  Icons.child_care,
-                  Colors.blue,
-                  _babySummary!,
-                ),
+                Builder(builder: (ctx) {
+                  // Ambil data bayi dari AuthProvider / ProfileProvider
+                  final user = context.read<AuthProvider>().user;
+                  final babyAge = BabyNutritionService.getAgeInMonths(
+                    user?.babyBirthDate,
+                  );
+                  return _buildProfileSection(
+                    context,
+                    'baby',
+                    'Nutrisi Bayi',
+                    Icons.child_care,
+                    Colors.blue,
+                    _babySummary!,
+                    babyAgeInMonths: babyAge,
+                    babyWeightKg: user?.babyWeightKg,
+                  );
+                }),
               const SizedBox(height: 24),
 
               // Mother nutrition summary
+              // targetCalories dari DietPlanProvider agar sinkron dengan Diet Plan
               if (_motherSummary != null)
                 _buildProfileSection(
                   context,
@@ -257,6 +268,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Icons.person,
                   Colors.pink,
                   _motherSummary!,
+                  calorieOverride:
+                      context.read<DietPlanProvider>().targetCalories,
                 ),
               const SizedBox(height: 24),
 
@@ -437,12 +450,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String title,
     IconData icon,
     Color color,
-    NutritionSummary summary,
-  ) {
+    NutritionSummary summary, {
+    // Ibu: override kalori dari DietPlanProvider
+    double? calorieOverride,
+    // Bayi: data untuk kalkulasi dinamis WHO/Holliday-Segar
+    int? babyAgeInMonths,
+    double? babyWeightKg,
+  }) {
     final progress = NutritionTrackerService.calculateProgress(
       summary: summary,
       profileType: profileType,
+      calorieOverride: calorieOverride,
+      babyAgeInMonths: babyAgeInMonths,
+      babyWeightKg: babyWeightKg,
     );
+
+    // Subtitle tambahan untuk bayi (kategori usia)
+    final String? babyAgeLabel = profileType == 'baby'
+        ? BabyNutritionService.getAgeLabel(babyAgeInMonths)
+        : null;
+
+    // Apakah menggunakan data statis fallback (bayi tanpa data lengkap)
+    final bool usingStaticFallback = profileType == 'baby' &&
+        (babyAgeInMonths == null ||
+            babyAgeInMonths < 6 ||
+            babyAgeInMonths > 23);
 
     // Check if target exceeded
     final hasWarning = NutritionTrackerService.hasExceededTarget(progress);
@@ -478,20 +510,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              title,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          // Ikon ℹ️ — hanya untuk bayi, buka bottom sheet sumber data
+                          if (profileType == 'baby')
+                            GestureDetector(
+                              onTap: () =>
+                                  _showBabyNutritionInfoSheet(context),
+                              child: Tooltip(
+                                message: 'Sumber perhitungan',
+                                child: Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 20,
+                                  color: Colors.blue[400],
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                       Text(
-                        'Target Harian',
+                        profileType == 'baby' &&
+                                babyAgeLabel != null &&
+                                !usingStaticFallback
+                            ? 'Target Harian · $babyAgeLabel'
+                            : 'Target Harian',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey[600],
                         ),
                       ),
+                      // Banner jika data bayi belum lengkap → fallback statis
+                      if (profileType == 'baby' && usingStaticFallback)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline,
+                                  size: 12, color: Colors.orange[600]),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  'Lengkapi data bayi untuk kalkulasi lebih akurat',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.orange[700],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -689,6 +766,117 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Bottom sheet yang menjelaskan sumber data kalkulasi nutrisi bayi.
+  /// Ditampilkan saat pengguna mengetuk ikon ℹ️ di header "Nutrisi Bayi".
+  void _showBabyNutritionInfoSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Judul
+              Row(
+                children: [
+                  Icon(Icons.info_outline_rounded,
+                      color: Colors.blue[600], size: 22),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Tentang Kalkulasi Nutrisi Bayi',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Isi penjelasan
+              Text(
+                BabyNutritionService.infoText,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[700],
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Rincian metode
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Metode Kalkulasi',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue[800],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _infoRow('📊',
+                        'Total energi: Holliday-Segar (berdasarkan berat badan)'),
+                    _infoRow('🍼',
+                        'Porsi MPASI: 30% (6–8 bln) · 50% (9–11 bln) · 70% (12–23 bln)'),
+                    _infoRow('🥩', 'Protein: 15% · Lemak: 35% · Karbo: sisa'),
+                    _infoRow('📋',
+                        'Fallback: data statis AKG Indonesia 2019 jika data bayi belum diisi'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _infoRow(String emoji, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 14)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 12, color: Colors.blue[900]),
             ),
           ),
         ],

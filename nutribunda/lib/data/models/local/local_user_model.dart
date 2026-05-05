@@ -19,6 +19,10 @@ class LocalUserModel extends Equatable {
   final DateTime updatedAt;
   final String syncStatus; // 'synced', 'pending', 'failed'
 
+  // --- Data bayi ---
+  final DateTime? babyBirthDate;
+  final double? babyWeightKg;
+
   const LocalUserModel({
     this.id,
     this.serverId,
@@ -34,6 +38,8 @@ class LocalUserModel extends Equatable {
     required this.createdAt,
     required this.updatedAt,
     this.syncStatus = 'synced',
+    this.babyBirthDate,
+    this.babyWeightKg,
   });
 
   /// Create from UserModel (from server)
@@ -52,6 +58,8 @@ class LocalUserModel extends Equatable {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       syncStatus: 'synced',
+      babyBirthDate: user.babyBirthDate,
+      babyWeightKg: user.babyWeightKg,
     );
   }
 
@@ -70,6 +78,8 @@ class LocalUserModel extends Equatable {
       timezone: timezone,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      babyBirthDate: babyBirthDate,
+      babyWeightKg: babyWeightKg,
     );
   }
 
@@ -90,6 +100,10 @@ class LocalUserModel extends Equatable {
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
       syncStatus: map['sync_status'] as String? ?? 'synced',
+      babyBirthDate: map['baby_birth_date'] != null
+          ? DateTime.tryParse(map['baby_birth_date'] as String)
+          : null,
+      babyWeightKg: map['baby_weight_kg'] as double?,
     );
   }
 
@@ -110,6 +124,8 @@ class LocalUserModel extends Equatable {
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
       'sync_status': syncStatus,
+      'baby_birth_date': babyBirthDate?.toIso8601String().substring(0, 10),
+      'baby_weight_kg': babyWeightKg,
     };
   }
 
@@ -129,6 +145,8 @@ class LocalUserModel extends Equatable {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? syncStatus,
+    DateTime? babyBirthDate,
+    double? babyWeightKg,
   }) {
     return LocalUserModel(
       id: id ?? this.id,
@@ -145,6 +163,8 @@ class LocalUserModel extends Equatable {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       syncStatus: syncStatus ?? this.syncStatus,
+      babyBirthDate: babyBirthDate ?? this.babyBirthDate,
+      babyWeightKg: babyWeightKg ?? this.babyWeightKg,
     );
   }
 
@@ -164,5 +184,7 @@ class LocalUserModel extends Equatable {
         createdAt,
         updatedAt,
         syncStatus,
+        babyBirthDate,
+        babyWeightKg,
       ];
 }

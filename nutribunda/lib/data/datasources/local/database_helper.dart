@@ -24,7 +24,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 3, // dinaikkan dari 1 → 3 (v2: food price, v3: baby fields)
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -48,7 +48,9 @@ class DatabaseHelper {
         timezone TEXT DEFAULT 'WIB',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        sync_status TEXT DEFAULT 'synced'
+        sync_status TEXT DEFAULT 'synced',
+        baby_birth_date TEXT,
+        baby_weight_kg REAL
       )
     ''');
 
@@ -209,10 +211,19 @@ class DatabaseHelper {
 
   /// Upgrade database schema
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
-    // Handle future schema migrations
-    if (oldVersion < 2){     
+    // v1 → v2: tambah kolom harga makanan
+    if (oldVersion < 2) {
       await db.execute(
         'ALTER TABLE foods ADD COLUMN estimated_price_per_100g REAL',
+      );
+    }
+    // v2 → v3: tambah kolom data bayi di tabel users
+    if (oldVersion < 3) {
+      await db.execute(
+        'ALTER TABLE users ADD COLUMN baby_birth_date TEXT',
+      );
+      await db.execute(
+        'ALTER TABLE users ADD COLUMN baby_weight_kg REAL',
       );
     }
   }

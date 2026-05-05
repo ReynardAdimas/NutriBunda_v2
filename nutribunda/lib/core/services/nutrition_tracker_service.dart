@@ -1,4 +1,5 @@
 import '../../data/models/nutrition_summary.dart';
+import 'baby_nutrition_service.dart';
 
 /// Service untuk tracking dan kalkulasi nutrisi harian
 /// Requirements: 4.3, 4.6, 13.2 - Nutrition calculation dan dashboard summary
@@ -52,13 +53,45 @@ class NutritionTrackerService {
     }
   }
 
-  /// Calculate nutrition progress for a profile
+  /// Calculate nutrition progress for a profile.
+  ///
+  /// **Untuk profil ibu** (`profileType == 'mother'`):
+  ///   - Jika [calorieOverride] diisi (dari `DietPlanProvider.targetCalories`),
+  ///     nilai ini menggantikan target kalori statis 2300 kkal agar sinkron
+  ///     dengan hasil kalkulasi BMR/TDEE di Diet Plan.
+  ///
+  /// **Untuk profil bayi** (`profileType == 'baby'`):
+  ///   - Jika [babyAgeInMonths] dan/atau [babyWeightKg] tersedia, target
+  ///     dihitung dinamis via [BabyNutritionService] (Holliday-Segar + WHO).
+  ///   - Jika tidak tersedia atau usia di luar 6–23 bulan, fallback ke
+  ///     [babyTargets] statis.
+  ///
   /// Requirements: 4.3, 4.6 - Nutrition calculation and summary
   static NutritionProgress calculateProgress({
     required NutritionSummary summary,
     required String profileType,
+    // Ibu: override kalori dari DietPlanProvider
+    double? calorieOverride,
+    // Bayi: data untuk kalkulasi dinamis
+    int? babyAgeInMonths,
+    double? babyWeightKg,
   }) {
-    final targets = getTargets(profileType);
+    Map<String, double> targets;
+
+    if (profileType == 'baby') {
+      // Coba kalkulasi dinamis WHO/Holliday-Segar
+      final dynamic = BabyNutritionService.getTargets(
+        ageInMonths: babyAgeInMonths,
+        babyWeightKg: babyWeightKg,
+      );
+      targets = dynamic ?? Map.from(babyTargets);
+    } else {
+      // Profil ibu — mulai dari data statis, lalu terapkan override kalori
+      targets = Map<String, double>.from(motherTargets);
+      if (calorieOverride != null && calorieOverride > 0) {
+        targets['calories'] = calorieOverride;
+      }
+    }
 
     final caloriesPercentage = calculatePercentage(
       summary.calories,
