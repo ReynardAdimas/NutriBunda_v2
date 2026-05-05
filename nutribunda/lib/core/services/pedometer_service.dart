@@ -15,6 +15,7 @@ class PedometerService {
   StreamSubscription<StepCount>? _subscription;
   StreamSubscription<PedestrianStatus>? _statusSubscription;
   Timer? _midnightResetTimer;
+  Timer? _sensorCheckTimer; // Deteksi jika sensor tidak memancarkan event
 
   int _initialSteps = 0;
   int _currentSteps = 0;
@@ -60,6 +61,10 @@ class PedometerService {
     try {
       _subscription = Pedometer.stepCountStream.listen(
         (StepCount event) {
+          // Batalkan timer diagnostik — sensor sudah terbukti berfungsi
+          _sensorCheckTimer?.cancel();
+          _sensorCheckTimer = null;
+
           if (!_initialStepsSet) {
             _initialSteps = event.steps;
             _initialStepsSet = true;
@@ -108,6 +113,20 @@ class PedometerService {
 
       // Jadwalkan reset otomatis saat tengah malam
       _scheduleMidnightReset(onStepUpdate, onMilestoneReached);
+
+      // Pasang timer diagnostik: jika dalam 8 detik tidak ada event sama sekali,
+      // kemungkinan sensor tidak tersedia atau permission runtime belum efektif.
+      // Ini TIDAK menghentikan pedometer — hanya melaporkan via errorMessage
+      // agar UI bisa menampilkan pesan yang berguna kepada user.
+      _sensorCheckTimer = Timer(const Duration(seconds: 8), () {
+        if (!_initialStepsSet && _isListening) {
+          _errorMessage =
+              'Sensor langkah belum merespon. Coba berjalan beberapa langkah '
+              'atau periksa izin "Aktivitas Fisik" di pengaturan.';
+          debugPrint('PedometerService: No step events received after 8s');
+          onStepUpdate(_currentSteps); // trigger UI rebuild agar error muncul
+        }
+      });
 
       debugPrint('PedometerService: Started listening (always-on mode)');
     } catch (e) {
@@ -186,6 +205,8 @@ class PedometerService {
     _statusSubscription = null;
     _midnightResetTimer?.cancel();
     _midnightResetTimer = null;
+    _sensorCheckTimer?.cancel();
+    _sensorCheckTimer = null;
     _isListening = false;
     _initialStepsSet = false;
     debugPrint('PedometerService: Stopped listening');

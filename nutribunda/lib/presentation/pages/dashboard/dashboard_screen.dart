@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
+import 'package:permission_handler/permission_handler.dart';
 import '../../providers/food_diary_provider.dart';
 import '../../providers/diet_plan_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -68,15 +69,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _initializeDietPlan() async {
     final authProvider = context.read<AuthProvider>();
     final dietPlanProvider = context.read<DietPlanProvider>();
-    
-    // Set user data from auth provider
+
+    // Fix #1: Set currentUserId SEBELUM loadTodaySteps dipanggil,
+    // agar guard `if (_currentUserId == null) return;` tidak memblokir.
     if (authProvider.user != null) {
       dietPlanProvider.setUser(authProvider.user!);
+
+      final userId = authProvider.user!.id.hashCode.abs();
+      dietPlanProvider.setCurrentUserId(userId);
+      
     }
-    
-    // Auto-start pedometer tracking if profile data is complete
+
+    // Fix #2: Minta permission ACTIVITY_RECOGNITION sebelum memulai pedometer.
+    // Permission ini wajib ada di Android 10+ (API 29+) agar sensor berfungsi.
     if (dietPlanProvider.canCalculateDietPlan) {
-      dietPlanProvider.loadTodaySteps();
+      final status = await Permission.activityRecognition.request();
+      if (status.isGranted) {
+        dietPlanProvider.loadTodaySteps();
+      } else if (status.isPermanentlyDenied) {
+        // Arahkan ke settings jika user menolak permanen
+        openAppSettings();
+      }
+      // Jika hanya ditolak (bukan permanen), pedometer tidak dijalankan
+      // tapi app tetap berfungsi normal
     }
   }
 

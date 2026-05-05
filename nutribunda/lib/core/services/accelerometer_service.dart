@@ -10,9 +10,19 @@ class AccelerometerService {
   DateTime? _lastShakeTime;
 
   // Constants
-  static const double shakeThreshold = 20.0; // m/s² (tanpa gravitasi)
+  // Dinaikkan dari 20.0 → 25.0 m/s²:
+  // Normal walking  : ~2–8  m/s²
+  // Jogging/berlari : ~8–20 m/s²
+  // Shake disengaja : >25   m/s²
+  // 20.0 terlalu rendah → false positive saat langkah berat / naik tangga
+  static const double shakeThreshold = 20.0;
   static const int shakeCooldownMs = 3000;   // 3 detik cooldown
   static const int shakeWindowMs = 500;      // jendela waktu deteksi shake
+
+  // Shake yang valid harus melampaui threshold minimal N kali dalam 1 window.
+  // Walking biasanya cuma 1 puncak per langkah; shake manusia menghasilkan
+  // beberapa puncak berturut-turut dalam 500 ms.
+  static const int minThresholdHits = 2;
 
   bool _isListening = false;
   bool _sensorAvailable = true; // FIX: tambah flag ketersediaan sensor
@@ -20,6 +30,8 @@ class AccelerometerService {
 
   // FIX: Track waktu pertama kali threshold terlampaui dalam satu window
   DateTime? _firstThresholdTime;
+  // FIX: Hitung berapa kali threshold terlampaui dalam satu window
+  int _thresholdHitCount = 0;
 
   // Getters
   bool get isListening => _isListening;
@@ -36,7 +48,12 @@ class AccelerometerService {
     }
 
     try {
-      _subscription = userAccelerometerEventStream().listen(
+      // sensors_plus 6.x: samplingPeriod wajib diset eksplisit.
+      // SensorInterval.normal (~50ms / 20 Hz) cukup untuk shake detection
+      // dan mengurangi beban CPU vs default "fastest" yang bisa ribuan Hz.
+      _subscription = userAccelerometerEventStream(
+        samplingPeriod: SensorInterval.normalInterval,
+      ).listen(
         (UserAccelerometerEvent event) {
           _handleAccelerometerEvent(event, onShakeDetected);
         },
@@ -53,14 +70,15 @@ class AccelerometerService {
       debugPrint('AccelerometerService: Started listening');
     } catch (e) {
       _errorMessage = 'Sensor akselerometer tidak tersedia di perangkat ini';
-      _sensorAvailable = false; // FIX: tangkap jika sensor tidak ada
+      _sensorAvailable = false; 
       debugPrint('AccelerometerService: Exception - $e');
     }
   }
 
-  /// FIX: Pendekatan baru — deteksi shake berdasarkan "puncak dalam jendela waktu"
-  /// Jika dalam shakeWindowMs ada setidaknya satu puncak di atas threshold → shake
-  /// Requirements: 6.2 - Deteksi shake dengan threshold 20 m/s² dalam window 500ms
+  /// Deteksi shake hanya jika threshold terlampaui ≥ minThresholdHits kali
+  /// dalam satu window (shakeWindowMs). Ini mencegah false positive dari
+  /// satu langkah berat yang menghasilkan satu puncak akselerasi tinggi.
+  /// Requirements: 6.2
   void _handleAccelerometerEvent(
     UserAccelerometerEvent event,
     Function onShakeDetected,
@@ -73,54 +91,54 @@ class AccelerometerService {
 
     if (acceleration > shakeThreshold) {
       if (_firstThresholdTime == null) {
-        // Catat waktu pertama kali threshold terlampaui
         _firstThresholdTime = now;
+        _thresholdHitCount = 1;
         debugPrint(
-          'AccelerometerService: Threshold exceeded '
-          '(acceleration: ${acceleration.toStringAsFixed(2)} m/s²)',
+          'AccelerometerService: Threshold hit #1 '
+          '(${acceleration.toStringAsFixed(2)} m/s²)',
         );
-      }
-
-      // Cek apakah masih dalam jendela waktu yang valid
-      final int elapsed = now.difference(_firstThresholdTime!).inMilliseconds;
-
-      if (elapsed <= shakeWindowMs) {
-        // Masih dalam window — cek cooldown lalu trigger
-        if (_lastShakeTime == null ||
-            now.difference(_lastShakeTime!).inMilliseconds > shakeCooldownMs) {
-          _lastShakeTime = now;
-          _firstThresholdTime = null; // reset untuk shake berikutnya
-          _errorMessage = null;
-
-          debugPrint(
-            'AccelerometerService: Shake detected! '
-            '(elapsed: ${elapsed}ms, acceleration: ${acceleration.toStringAsFixed(2)} m/s²)',
-          );
-
-          onShakeDetected();
-        } else {
-          final int timeSinceLastShake =
-              now.difference(_lastShakeTime!).inMilliseconds;
-          debugPrint(
-            'AccelerometerService: Shake ignored — cooldown '
-            '($timeSinceLastShake ms < $shakeCooldownMs ms)',
-          );
-          _firstThresholdTime = null;
-        }
       } else {
-        // Lewat window tapi threshold masih terlampaui — mulai window baru
-        _firstThresholdTime = now;
+        final int elapsed = now.difference(_firstThresholdTime!).inMilliseconds;
+
+        if (elapsed <= shakeWindowMs) {
+          _thresholdHitCount++;
+          debugPrint(
+            'AccelerometerService: Threshold hit #$_thresholdHitCount '
+            '(${acceleration.toStringAsFixed(2)} m/s², ${elapsed}ms elapsed)',
+          );
+
+          // Baru trigger jika sudah cukup hits dalam window
+          if (_thresholdHitCount >= minThresholdHits) {
+            if (_lastShakeTime == null ||
+                now.difference(_lastShakeTime!).inMilliseconds > shakeCooldownMs) {
+              _lastShakeTime = now;
+              _firstThresholdTime = null;
+              _thresholdHitCount = 0;
+              _errorMessage = null;
+
+              debugPrint('AccelerometerService: Shake confirmed! '
+                  '($_thresholdHitCount hits in ${elapsed}ms)');
+
+              onShakeDetected();
+            } else {
+              debugPrint('AccelerometerService: Shake ignored — cooldown aktif');
+              _firstThresholdTime = null;
+              _thresholdHitCount = 0;
+            }
+          }
+        } else {
+          // Window kedaluwarsa — mulai window baru
+          _firstThresholdTime = now;
+          _thresholdHitCount = 1;
+        }
       }
     } else {
-      // Di bawah threshold — reset window jika sudah kedaluwarsa
+      // Di bawah threshold — reset window jika sudah expired
       if (_firstThresholdTime != null) {
         final int elapsed = now.difference(_firstThresholdTime!).inMilliseconds;
         if (elapsed > shakeWindowMs) {
-          debugPrint(
-            'AccelerometerService: Window expired without valid shake '
-            '(${elapsed}ms)',
-          );
           _firstThresholdTime = null;
+          _thresholdHitCount = 0;
         }
       }
     }
@@ -133,6 +151,7 @@ class AccelerometerService {
 
     _isListening = false;
     _firstThresholdTime = null;
+    _thresholdHitCount = 0;
 
     debugPrint('AccelerometerService: Stopped listening');
   }
