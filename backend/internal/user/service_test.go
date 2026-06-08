@@ -16,14 +16,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 // setupTestDB creates a test database connection
 func setupTestDB(t *testing.T) *gorm.DB {
-	dsn := "host=localhost user=nutribunda_user password=nutribunda_pass dbname=nutribunda_test port=5432 sslmode=disable"
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 
 	err = db.AutoMigrate(&database.User{})

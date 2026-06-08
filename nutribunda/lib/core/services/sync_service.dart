@@ -87,7 +87,7 @@ class SyncService {
   /// Returns true if sync was successful, false otherwise
   Future<bool> syncDiaryEntries() async {
     if (_isSyncing) {
-      return false; // Already syncing
+      return false; 
     }
 
     if (!await hasConnectivity()) {

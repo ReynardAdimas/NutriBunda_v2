@@ -356,7 +356,7 @@ class FoodDiaryProvider extends ChangeNotifier {
     double? protein,
     double? carbs,
     double? fat,
-    double? estimatedPricePer100g, // field harga, opsional
+    double? estimatedPricePer100g, 
   }) async {
     // --- Validasi input ---
     if (profileType != 'baby' && profileType != 'mother') {
@@ -382,10 +382,6 @@ class FoodDiaryProvider extends ChangeNotifier {
 
     // Category makanan mengikuti profile
     final foodCategory = profileType == 'baby' ? 'mpasi' : 'ibu';
-
-    // ----------------------------------------------------------------
-    // STEP 1: Input manual → simpan ke food database
-    // ----------------------------------------------------------------
     String? resolvedFoodId = foodId;
 
     if (customFoodName != null) {

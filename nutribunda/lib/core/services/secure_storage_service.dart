@@ -37,7 +37,6 @@ class SecureStorageService {
   }
 
   /// Mengambil access token dari secure storage
-  /// Requirements: 1.4 - JWT harus dapat diambil untuk autentikasi API
   Future<String?> getAccessToken() async {
     try {
       return await _secureStorage.read(key: _keyAccessToken);
@@ -65,7 +64,6 @@ class SecureStorageService {
   }
 
   /// Menghapus semua token dari secure storage
-  /// Requirements: 1.7 - Saat logout, JWT harus dihapus dari storage
   Future<void> deleteTokens() async {
     try {
       await _secureStorage.delete(key: _keyAccessToken);

@@ -3,8 +3,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import 'register_screen.dart';
 
-/// Login Screen
-/// Requirements: 1.1, 1.5, 1.7
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -29,7 +28,6 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final authProvider = context.read<AuthProvider>();
       // Hanya cek apakah device mendukung biometrik (bukan apakah user sudah enable)
-      // Agar tombol selalu tampil di device yang support
       final isSupported = await authProvider.biometricService.isDeviceSupported();
       if (mounted) {
         setState(() {
